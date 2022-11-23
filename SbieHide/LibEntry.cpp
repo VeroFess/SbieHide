@@ -33,7 +33,6 @@ VOID EraseModuleNameFromPeb(PCWCH ModuleToHide) {
 			RtlZeroMemory(CurrentEntry->FullDllName.Buffer, CurrentEntry->FullDllName.MaximumLength);
 			CurrentEntry->FullDllName.Length = 0;
 			CurrentEntry->BaseNameHashValue = 0;
-			break;
 		}
 
 		CurrentEntry = CONTAINING_RECORD(reinterpret_cast<PLDR_DATA_TABLE_ENTRY>(CurrentEntry->InMemoryOrderLinks.Flink), LDR_DATA_TABLE_ENTRY, InMemoryOrderLinks);
