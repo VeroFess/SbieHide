@@ -17,6 +17,8 @@
 
 typedef NTSTATUS(NTAPI* NtQueryVirtualMemoryType)(_In_ HANDLE ProcessHandle, _In_opt_ PVOID BaseAddress, _In_ MEMORY_INFORMATION_CLASS MemoryInformationClass, _Out_writes_bytes_(MemoryInformationLength) PVOID MemoryInformation, _In_ SIZE_T MemoryInformationLength, _Out_opt_ PSIZE_T ReturnLength);
 NtQueryVirtualMemoryType NtQueryVirtualMemorySaved = nullptr;
+typedef NTSTATUS(NTAPI* NtQueryObjectType)(_In_opt_ HANDLE Handle, _In_ OBJECT_INFORMATION_CLASS ObjectInformationClass, _Out_writes_bytes_opt_(ObjectInformationLength) PVOID ObjectInformation, _In_ ULONG ObjectInformationLength, _Out_opt_ PULONG ReturnLength);
+NtQueryObjectType NtQueryObjectSaved = nullptr;
 
 VOID EraseModuleNameFromPeb(PCWCH ModuleToHide) {
 	PPEB                      ProcessEnvironmentBlock = nullptr;
@@ -70,6 +72,35 @@ NTSTATUS NTAPI NtQueryVirtualMemoryProxy(_In_ HANDLE ProcessHandle, _In_opt_ PVO
 	return Status;
 }
 
+NTSTATUS NTAPI NtQueryObjectProxy(_In_opt_ HANDLE Handle, _In_ OBJECT_INFORMATION_CLASS ObjectInformationClass, _Out_writes_bytes_opt_(ObjectInformationLength) PVOID ObjectInformation, _In_ ULONG ObjectInformationLength, _Out_opt_ PULONG ReturnLength) {
+	NTSTATUS Status = STATUS_SUCCESS;
+
+	Status = NtQueryObjectSaved(Handle, ObjectInformationClass, ObjectInformation, ObjectInformationLength, ReturnLength);
+
+	if (NT_SUCCESS(Status) && ObjectInformationClass == ObjectNameInformation) {
+		UNICODE_STRING ObjectName = {};
+
+		if (!NT_SUCCESS(RtlUpcaseUnicodeString(&ObjectName, &reinterpret_cast<POBJECT_NAME_INFORMATION>(ObjectInformation)->Name, TRUE))) {
+			return Status;
+		}
+
+		if (ObjectName.Buffer == NULL || ObjectName.Length == 0) {
+			RtlFreeUnicodeString(&ObjectName);
+			return Status;
+		}
+
+		if ((wcsstr(ObjectName.Buffer, L"SBIEDLL") != 0) || (wcsstr(ObjectName.Buffer, L"SBIEHIDE") != 0)) {
+			RtlZeroMemory(reinterpret_cast<POBJECT_NAME_INFORMATION>(ObjectInformation)->Name.Buffer, reinterpret_cast<POBJECT_NAME_INFORMATION>(ObjectInformation)->Name.MaximumLength);
+			reinterpret_cast<POBJECT_NAME_INFORMATION>(ObjectInformation)->Name.Length = 0;
+		}
+
+		RtlFreeUnicodeString(&ObjectName);
+
+		return STATUS_ACCESS_DENIED;
+	}
+
+	return Status;
+}
 
 
 BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
@@ -86,6 +117,14 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 		}
 
 		if (MH_EnableHook(NtQueryVirtualMemory) != MH_OK) {
+			return FALSE;
+		}
+
+		if (MH_CreateHook(NtQueryObject, NtQueryObjectProxy, reinterpret_cast<PVOID*>(&NtQueryObjectSaved)) != MH_OK) {
+			return FALSE;
+		}
+
+		if (MH_EnableHook(NtQueryObject) != MH_OK) {
 			return FALSE;
 		}
 
