@@ -45,5 +45,5 @@ Finally, please bring a sample in issue, and I will try to correct this problem.
 -----
 
 ## LICENSE
-Binklac-Anticheat is licensed under the MIT License. Dependencies are under their respective licenses.
+SbieHide is licensed under the MIT License. Dependencies are under their respective licenses.
 
