@@ -18,12 +18,30 @@
     <ClCompile Include="LibEntry.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="MemoryImageHideInformation.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="HideFromPEB.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="APIHook.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="MINT.h">
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="MinHook.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="MemoryImageHideInformation.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="HideFromPEB.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="APIHook.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>

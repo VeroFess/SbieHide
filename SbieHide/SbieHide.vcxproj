@@ -133,9 +133,15 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="APIHook.cpp" />
+    <ClCompile Include="HideFromPEB.cpp" />
     <ClCompile Include="LibEntry.cpp" />
+    <ClCompile Include="MemoryImageHideInformation.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="APIHook.h" />
+    <ClInclude Include="HideFromPEB.h" />
+    <ClInclude Include="MemoryImageHideInformation.h" />
     <ClInclude Include="MinHook.h" />
     <ClInclude Include="MINT.h" />
   </ItemGroup>
