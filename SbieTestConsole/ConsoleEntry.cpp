@@ -51,7 +51,7 @@ VOID CheckSandboxieByQueryVirtualMemoryMappedFilename() {
         return;
     }
 
-    Status = NtQueryVirtualMemory(NtCurrentProcess(), GetModuleHandleA("sbiehide.dll"), MemoryMappedFilenameInformation, NameBuffer, 0x1000, &ReturnedLength);
+    Status = NtQueryVirtualMemory(NtCurrentProcess(), GetModuleHandleA("sbiehide.dll") + 100, MemoryMappedFilenameInformation, NameBuffer, 0x1000, &ReturnedLength);
 
     if (Status != STATUS_ACCESS_DENIED) {
         printf("Sbiedll found! check hook\n");

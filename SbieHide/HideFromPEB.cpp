@@ -1,6 +1,8 @@
 #include "HideFromPEB.h"
 #include "MemoryImageHideInformation.h"
 
+#include <stdio.h>
+
 VOID EraseModuleNameFromPeb() {
     PPEB                  ProcessEnvironmentBlock = nullptr;
     PLIST_ENTRY           FirstEntry              = nullptr;
@@ -18,57 +20,33 @@ VOID EraseModuleNameFromPeb() {
         CurrentEntryData = CONTAINING_RECORD(reinterpret_cast<PLDR_DATA_TABLE_ENTRY>(CurrentEntry), LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
 
         if (IsAddressShouldHide(CurrentEntryData->DllBase)) {
+            if (FirstEntry == CurrentEntry) {
+                FirstEntry = CurrentEntry->Flink;
+            }
+
             NextEntry                                = CurrentEntry->Flink;
             CurrentEntryData->HashLinks.Blink->Flink = CurrentEntryData->HashLinks.Flink;
             CurrentEntryData->HashLinks.Flink->Blink = CurrentEntryData->HashLinks.Blink;
-            CurrentEntry->Blink->Flink               = CurrentEntry->Flink;
-            CurrentEntry->Flink->Blink               = CurrentEntry->Blink;
+
+            CurrentEntryData->InLoadOrderLinks.Blink->Flink = CurrentEntryData->InLoadOrderLinks.Flink;
+            CurrentEntryData->InLoadOrderLinks.Flink->Blink = CurrentEntryData->InLoadOrderLinks.Blink;
+
+            CurrentEntryData->InMemoryOrderLinks.Blink->Flink = CurrentEntryData->InMemoryOrderLinks.Flink;
+            CurrentEntryData->InMemoryOrderLinks.Flink->Blink = CurrentEntryData->InMemoryOrderLinks.Blink;
+
+            CurrentEntryData->InInitializationOrderLinks.Blink->Flink = CurrentEntryData->InInitializationOrderLinks.Flink;
+            CurrentEntryData->InInitializationOrderLinks.Flink->Blink = CurrentEntryData->InInitializationOrderLinks.Blink;
+
+            CurrentEntryData->NodeModuleLink.Blink->Flink = CurrentEntryData->NodeModuleLink.Flink;
+            CurrentEntryData->NodeModuleLink.Flink->Blink = CurrentEntryData->NodeModuleLink.Blink;
 
             RtlZeroMemory(CurrentEntryData->BaseDllName.Buffer, CurrentEntryData->BaseDllName.MaximumLength);
             RtlZeroMemory(CurrentEntryData->FullDllName.Buffer, CurrentEntryData->FullDllName.MaximumLength);
-            RtlZeroMemory(CurrentEntryData, sizeof(PLDR_DATA_TABLE_ENTRY));
-
-            CurrentEntry = NextEntry;
-            continue;
-        }
-
-        CurrentEntry = CurrentEntry->Flink;
-    }
-
-    FirstEntry = CurrentEntry = ProcessEnvironmentBlock->Ldr->InMemoryOrderModuleList.Flink;
-
-    while (CurrentEntry->Flink != FirstEntry) {
-        CurrentEntryData = CONTAINING_RECORD(reinterpret_cast<PLDR_DATA_TABLE_ENTRY>(CurrentEntry), LDR_DATA_TABLE_ENTRY, InMemoryOrderLinks);
-
-        if (IsAddressShouldHide(CurrentEntryData->DllBase)) {
-            NextEntry                  = CurrentEntry->Flink;
-            CurrentEntry->Blink->Flink = CurrentEntry->Flink;
-            CurrentEntry->Flink->Blink = CurrentEntry->Blink;
-
-            RtlZeroMemory(CurrentEntryData->BaseDllName.Buffer, CurrentEntryData->BaseDllName.MaximumLength);
-            RtlZeroMemory(CurrentEntryData->FullDllName.Buffer, CurrentEntryData->FullDllName.MaximumLength);
-            RtlZeroMemory(CurrentEntryData, sizeof(PLDR_DATA_TABLE_ENTRY));
-
-            CurrentEntry = NextEntry;
-            continue;
-        }
-
-        CurrentEntry = CurrentEntry->Flink;
-    }
-
-    FirstEntry = CurrentEntry = ProcessEnvironmentBlock->Ldr->InInitializationOrderModuleList.Flink;
-
-    while (CurrentEntry->Flink != FirstEntry) {
-        CurrentEntryData = CONTAINING_RECORD(reinterpret_cast<PLDR_DATA_TABLE_ENTRY>(CurrentEntry), LDR_DATA_TABLE_ENTRY, InInitializationOrderLinks);
-
-        if (IsAddressShouldHide(CurrentEntryData->DllBase)) {
-            NextEntry                  = CurrentEntry->Flink;
-            CurrentEntry->Blink->Flink = CurrentEntry->Flink;
-            CurrentEntry->Flink->Blink = CurrentEntry->Blink;
-
-            RtlZeroMemory(CurrentEntryData->BaseDllName.Buffer, CurrentEntryData->BaseDllName.MaximumLength);
-            RtlZeroMemory(CurrentEntryData->FullDllName.Buffer, CurrentEntryData->FullDllName.MaximumLength);
-            RtlZeroMemory(CurrentEntryData, sizeof(PLDR_DATA_TABLE_ENTRY));
+            #ifdef _WIN64
+                        RtlZeroMemory(CurrentEntryData, 136);
+            #else
+                        RtlZeroMemory(CurrentEntryData, 72);
+            #endif
 
             CurrentEntry = NextEntry;
             continue;

@@ -17,7 +17,7 @@ BOOLEAN InitMemoryImageHideInformation() {
 
     while (reinterpret_cast<PLDR_DATA_TABLE_ENTRY>(CONTAINING_RECORD(CurrentEntry->InMemoryOrderLinks.Flink, LDR_DATA_TABLE_ENTRY, InMemoryOrderLinks)) != FirstEntry) {
 
-        if (_wcsnicmp(CurrentEntry->BaseDllName.Buffer, L"sbiedll.dll", CurrentEntry->BaseDllName.Length) == 0) {
+        if (_wcsnicmp(CurrentEntry->BaseDllName.Buffer, L"sbiedll.dll", CurrentEntry->BaseDllName.Length) == 0 || _wcsnicmp(CurrentEntry->BaseDllName.Buffer, L"sbiedll", CurrentEntry->BaseDllName.Length) == 0) {
             MemoryImageHideInformationList.push_back(MemoryImageHideInformation(reinterpret_cast<ULONG_PTR>(CurrentEntry->DllBase), reinterpret_cast<ULONG_PTR>(CurrentEntry->DllBase) + CurrentEntry->SizeOfImage));
             IsSandboxieModuleFound = TRUE;
         }

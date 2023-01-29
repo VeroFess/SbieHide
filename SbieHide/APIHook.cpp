@@ -60,6 +60,11 @@ NTSTATUS NTAPI NtQueryObjectProxy(_In_opt_ HANDLE Handle, _In_ OBJECT_INFORMATIO
             return Status;
         }
 
+        if (ObjectName.Length < 7) {
+            RtlFreeUnicodeString(&ObjectName);
+            return Status;
+        }
+
         if ((wcsstr(ObjectName.Buffer, L"SBIEDLL") != 0) || (wcsstr(ObjectName.Buffer, L"SBIEHIDE") != 0)) {
             RtlZeroMemory(reinterpret_cast<POBJECT_NAME_INFORMATION>(ObjectInformation)->Name.Buffer, reinterpret_cast<POBJECT_NAME_INFORMATION>(ObjectInformation)->Name.MaximumLength);
             reinterpret_cast<POBJECT_NAME_INFORMATION>(ObjectInformation)->Name.Length = 0;
@@ -100,6 +105,11 @@ NTSTATUS NTAPI NtQueryInformationFileProxy(_In_ HANDLE FileHandle, _Out_ PIO_STA
                 return Status;
             }
 
+            if (UpperFileName.Length < 7) {
+                RtlFreeUnicodeString(&UpperFileName);
+                return Status;
+            }
+
             if ((wcsstr(UpperFileName.Buffer, L"SBIEDLL") != 0) || (wcsstr(UpperFileName.Buffer, L"SBIEHIDE") != 0)) {
                 RtlZeroMemory(FileInformation, Length);
                 RtlFreeUnicodeString(&UpperFileName);
@@ -123,6 +133,11 @@ NTSTATUS NTAPI NtQueryInformationFileProxy(_In_ HANDLE FileHandle, _Out_ PIO_STA
             }
 
             if (UpperFileName.Buffer == NULL || UpperFileName.Length == 0) {
+                RtlFreeUnicodeString(&UpperFileName);
+                return Status;
+            }
+
+            if (UpperFileName.Length < 7) {
                 RtlFreeUnicodeString(&UpperFileName);
                 return Status;
             }
