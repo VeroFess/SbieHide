@@ -12,7 +12,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
         InitMemoryImageHideInformation();
 
 		EraseModuleNameFromPeb();
-        EraseModuleNameFromPeb();
+
 		EnableApiHook();
 		break;
 	case DLL_THREAD_ATTACH:

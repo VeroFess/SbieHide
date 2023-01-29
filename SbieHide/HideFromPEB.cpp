@@ -1,8 +1,6 @@
 #include "HideFromPEB.h"
 #include "MemoryImageHideInformation.h"
 
-#include <stdio.h>
-
 VOID EraseModuleNameFromPeb() {
     PPEB                  ProcessEnvironmentBlock = nullptr;
     PLIST_ENTRY           FirstEntry              = nullptr;
@@ -42,11 +40,6 @@ VOID EraseModuleNameFromPeb() {
 
             RtlZeroMemory(CurrentEntryData->BaseDllName.Buffer, CurrentEntryData->BaseDllName.MaximumLength);
             RtlZeroMemory(CurrentEntryData->FullDllName.Buffer, CurrentEntryData->FullDllName.MaximumLength);
-            #ifdef _WIN64
-                        RtlZeroMemory(CurrentEntryData, 136);
-            #else
-                        RtlZeroMemory(CurrentEntryData, 72);
-            #endif
 
             CurrentEntry = NextEntry;
             continue;
