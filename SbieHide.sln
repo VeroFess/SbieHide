@@ -10,6 +10,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "SbieTestConsole", "SbieTest
 		{8FC0DC28-721D-4135-BDA0-6D7A1E64CC87} = {8FC0DC28-721D-4135-BDA0-6D7A1E64CC87}
 	EndProjectSection
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "SHLoader", "SHLoader\SHLoader.vcxproj", "{054EA035-9618-4F99-B6E0-8D04C17D728D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -34,6 +36,14 @@ Global
 		{E60AF90F-5B94-454F-8806-0B7467BDE79E}.Release|x64.Build.0 = Release|x64
 		{E60AF90F-5B94-454F-8806-0B7467BDE79E}.Release|x86.ActiveCfg = Release|Win32
 		{E60AF90F-5B94-454F-8806-0B7467BDE79E}.Release|x86.Build.0 = Release|Win32
+		{054EA035-9618-4F99-B6E0-8D04C17D728D}.Debug|x64.ActiveCfg = Debug|x64
+		{054EA035-9618-4F99-B6E0-8D04C17D728D}.Debug|x64.Build.0 = Debug|x64
+		{054EA035-9618-4F99-B6E0-8D04C17D728D}.Debug|x86.ActiveCfg = Debug|Win32
+		{054EA035-9618-4F99-B6E0-8D04C17D728D}.Debug|x86.Build.0 = Debug|Win32
+		{054EA035-9618-4F99-B6E0-8D04C17D728D}.Release|x64.ActiveCfg = Release|x64
+		{054EA035-9618-4F99-B6E0-8D04C17D728D}.Release|x64.Build.0 = Release|x64
+		{054EA035-9618-4F99-B6E0-8D04C17D728D}.Release|x86.ActiveCfg = Release|Win32
+		{054EA035-9618-4F99-B6E0-8D04C17D728D}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
