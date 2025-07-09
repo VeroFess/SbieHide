@@ -82,10 +82,6 @@ int main(int argc, char* argv[]) {
 
     printf("Successfully started the child process!\n");
 
-    printf("Press any key to exit the console...\n");
-
-    getchar();
-
 CleanAndExit:
     if (StartupInfoEx.lpAttributeList) {
         DeleteProcThreadAttributeList(StartupInfoEx.lpAttributeList);
@@ -109,8 +105,4 @@ CleanAndExit:
     if (ProcessInformation.hThread != NULL) {
         CloseHandle(ProcessInformation.hThread);
     }
-
-    printf("[*][L] Press enter to exit\n");
-
-    getchar();
 }

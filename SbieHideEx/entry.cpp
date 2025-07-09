@@ -34,20 +34,20 @@ VOID ModulePreProcessInitRoutine() {
     }
 
     if (HookStatus == MH_OK) {
-        //if ((HookStatus = MH_CreateHook(reinterpret_cast<LPVOID>(LdrpCallTlsInitializersAddress), &LdrpCallTlsInitializersDetours, reinterpret_cast<void **>(&LdrpCallTlsInitializersOriginal))) != MH_OK) {
-        //    __fastfail(FAST_FAIL_FATAL_APP_EXIT);
-        //}
+        if ((HookStatus = MH_CreateHook(reinterpret_cast<LPVOID>(LdrpCallTlsInitializersAddress), &LdrpCallTlsInitializersDetours, reinterpret_cast<void **>(&LdrpCallTlsInitializersOriginal))) != MH_OK) {
+            __fastfail(FAST_FAIL_FATAL_APP_EXIT);
+        }
 
-        //if ((HookStatus = MH_EnableHook(reinterpret_cast<LPVOID>(LdrpCallTlsInitializersAddress))) != MH_OK) {
-        //    __fastfail(FAST_FAIL_FATAL_APP_EXIT);
-        //}
+        if ((HookStatus = MH_EnableHook(reinterpret_cast<LPVOID>(LdrpCallTlsInitializersAddress))) != MH_OK) {
+            __fastfail(FAST_FAIL_FATAL_APP_EXIT);
+        }
 
-        //if ((HookStatus = MH_CreateHook(reinterpret_cast<LPVOID>(LdrLoadDllAddress), &LdrLoadDllDetours, reinterpret_cast<void **>(&LdrLoadDllOriginal))) != MH_OK) {
-        //    __fastfail(FAST_FAIL_FATAL_APP_EXIT);
-        //}
+        if ((HookStatus = MH_CreateHook(reinterpret_cast<LPVOID>(LdrLoadDllAddress), &LdrLoadDllDetours, reinterpret_cast<void **>(&LdrLoadDllOriginal))) != MH_OK) {
+            __fastfail(FAST_FAIL_FATAL_APP_EXIT);
+        }
 
-        //if ((HookStatus = MH_EnableHook(reinterpret_cast<LPVOID>(LdrLoadDllAddress))) != MH_OK) {
-        //    __fastfail(FAST_FAIL_FATAL_APP_EXIT);
-        //}
+        if ((HookStatus = MH_EnableHook(reinterpret_cast<LPVOID>(LdrLoadDllAddress))) != MH_OK) {
+            __fastfail(FAST_FAIL_FATAL_APP_EXIT);
+        }
     }
 }

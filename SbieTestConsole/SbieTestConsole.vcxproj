@@ -145,10 +145,10 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="ConsoleEntry.cpp" />
+    <ClInclude Include="MINT.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="MINT.h" />
+    <ClCompile Include="ConsoleEntry.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

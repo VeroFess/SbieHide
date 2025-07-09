@@ -182,6 +182,10 @@ VOID CheckSandboxieBySystemInformation() {
 }
 
 int main() {
+    HMODULE x = LoadLibraryA("C:\Program Files\Sandboxie-Plus\SbieDll.dll");
+    printf("Loaded SbieDll.dll at 0x%016llX\n", reinterpret_cast<UINT64>(x));
+
+
     printf("=== Checking Sandboxie presence using different methods ===\n\n");
 
     printf("[1] Using GetModuleHandle:\n");

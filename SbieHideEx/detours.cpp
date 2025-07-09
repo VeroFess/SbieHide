@@ -1,6 +1,8 @@
 #include <phnt_windows.h>
 #include <phnt.h>
 
+#include <intrin.h>
+
 #include "detours.h"
 #include "syscall_invoker.h"
 
@@ -201,29 +203,23 @@ extern "C" NTSTATUS NTAPI NtQuerySystemInformationDetours(_In_ SYSTEM_INFORMATIO
         case SystemProcessInformation:
         case SystemExtendedProcessInformation:
         case SystemFullProcessInformation: {
-            PSYSTEM_PROCESS_INFORMATION ProcessInfo   = reinterpret_cast<PSYSTEM_PROCESS_INFORMATION>(SystemInformation);
-            PSYSTEM_PROCESS_INFORMATION CurrentEntry  = ProcessInfo;
-            PSYSTEM_PROCESS_INFORMATION PreviousEntry = nullptr;
+            PSYSTEM_PROCESS_INFORMATION ProcessInfo  = reinterpret_cast<PSYSTEM_PROCESS_INFORMATION>(SystemInformation);
+            PSYSTEM_PROCESS_INFORMATION CurrentEntry = ProcessInfo;
 
             while (CurrentEntry != nullptr) {
                 if (CurrentEntry->ImageName.Buffer != nullptr &&
                     CurrentEntry->ImageName.Length > 0) {
 
                     if (IsHiddenName(CurrentEntry->ImageName.Buffer, CurrentEntry->ImageName.Length)) {
-                        if (PreviousEntry != nullptr) {
-                            if (CurrentEntry->NextEntryOffset != 0) {
-                                PreviousEntry->NextEntryOffset += CurrentEntry->NextEntryOffset;
-                            } else {
-                                PreviousEntry->NextEntryOffset = 0;
-                            }
-                        }
+                        RtlZeroMemory(CurrentEntry->ImageName.Buffer, CurrentEntry->ImageName.Length);
+                        CurrentEntry->ImageName.Length = 0;
                     }
                 }
 
-                PreviousEntry = CurrentEntry;
                 if (CurrentEntry->NextEntryOffset == 0) {
                     break;
                 }
+
                 CurrentEntry = reinterpret_cast<PSYSTEM_PROCESS_INFORMATION>(reinterpret_cast<PCHAR>(CurrentEntry) + CurrentEntry->NextEntryOffset);
             }
         } break;
@@ -318,11 +314,10 @@ NTSTATUS NTAPI LdrLoadDllDetours(_In_opt_ PWSTR DllPath, _In_opt_ PULONG DllChar
     }
 
     ProcessEnvironmentBlock = NtCurrentPeb();
-
-    FirstEntry = CurrentEntry = ProcessEnvironmentBlock->Ldr->InLoadOrderModuleList.Flink;
+    FirstEntry = CurrentEntry = ProcessEnvironmentBlock->Ldr->InMemoryOrderModuleList.Flink;
 
     while (CurrentEntry->Flink != FirstEntry) {
-        CurrentEntryData = CONTAINING_RECORD(reinterpret_cast<PLDR_DATA_TABLE_ENTRY>(CurrentEntry), LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
+        CurrentEntryData = CONTAINING_RECORD(reinterpret_cast<PLDR_DATA_TABLE_ENTRY>(CurrentEntry), LDR_DATA_TABLE_ENTRY, InMemoryOrderLinks);
 
         if (IsHiddenName(CurrentEntryData->BaseDllName.Buffer, CurrentEntryData->BaseDllName.Length)) {
             SLock(&PEB_CUSTOM_LOCK);
@@ -335,17 +330,8 @@ NTSTATUS NTAPI LdrLoadDllDetours(_In_opt_ PWSTR DllPath, _In_opt_ PULONG DllChar
             CurrentEntryData->HashLinks.Blink->Flink = CurrentEntryData->HashLinks.Flink;
             CurrentEntryData->HashLinks.Flink->Blink = CurrentEntryData->HashLinks.Blink;
 
-            CurrentEntryData->InLoadOrderLinks.Blink->Flink = CurrentEntryData->InLoadOrderLinks.Flink;
-            CurrentEntryData->InLoadOrderLinks.Flink->Blink = CurrentEntryData->InLoadOrderLinks.Blink;
-
             CurrentEntryData->InMemoryOrderLinks.Blink->Flink = CurrentEntryData->InMemoryOrderLinks.Flink;
             CurrentEntryData->InMemoryOrderLinks.Flink->Blink = CurrentEntryData->InMemoryOrderLinks.Blink;
-
-            CurrentEntryData->InInitializationOrderLinks.Blink->Flink = CurrentEntryData->InInitializationOrderLinks.Flink;
-            CurrentEntryData->InInitializationOrderLinks.Flink->Blink = CurrentEntryData->InInitializationOrderLinks.Blink;
-
-            CurrentEntryData->NodeModuleLink.Blink->Flink = CurrentEntryData->NodeModuleLink.Flink;
-            CurrentEntryData->NodeModuleLink.Flink->Blink = CurrentEntryData->NodeModuleLink.Blink;
 
             RtlZeroMemory(CurrentEntryData->BaseDllName.Buffer, CurrentEntryData->BaseDllName.MaximumLength);
             RtlZeroMemory(CurrentEntryData->FullDllName.Buffer, CurrentEntryData->FullDllName.MaximumLength);
@@ -358,11 +344,6 @@ NTSTATUS NTAPI LdrLoadDllDetours(_In_opt_ PWSTR DllPath, _In_opt_ PULONG DllChar
         }
 
         CurrentEntry = CurrentEntry->Flink;
-    }
-
-    if ((DllPath != nullptr && IsHiddenName(DllPath, wcslen_light(DllPath))) || DllName != nullptr && DllName->Buffer != nullptr && IsHiddenName(DllName->Buffer, DllName->Length)) {
-        *DllHandle = 0;
-        return STATUS_NOT_FOUND;
     }
 
     return Status;
@@ -415,7 +396,7 @@ VOID NTAPI LdrpCallTlsInitializersDetours(IN ULONG_PTR Arg1, IN ULONG_PTR Arg2) 
         __fastfail(FAST_FAIL_INVALID_ARG);
     }
 
-    if ((Reason == DLL_PROCESS_ATTACH || Reason == DLL_THREAD_ATTACH) && ImageBase == reinterpret_cast<ULONG_PTR>(NtCurrentPeb()->ImageBaseAddress)) {
+    if ((Reason == DLL_PROCESS_ATTACH || Reason == DLL_THREAD_ATTACH)) {
         BOOL  shouldFix  = FALSE;
         PVOID backupPage = nullptr;
 
@@ -423,32 +404,22 @@ VOID NTAPI LdrpCallTlsInitializersDetours(IN ULONG_PTR Arg1, IN ULONG_PTR Arg2) 
             _G_ENTRY_POINT = reinterpret_cast<PBYTE>(NtCurrentPeb()->ImageBaseAddress) + reinterpret_cast<PIMAGE_NT_HEADERS>(reinterpret_cast<PBYTE>(NtCurrentPeb()->ImageBaseAddress) + reinterpret_cast<PIMAGE_DOS_HEADER>(NtCurrentPeb()->ImageBaseAddress)->e_lfanew)->OptionalHeader.AddressOfEntryPoint;
         }
 
-        for (int i = 0; i < ENTRY_DATA_SIZE; i++) {
-            if (_G_ENTRY_POINT[i] != ENTRY_DATA[i]) {
-                shouldFix = TRUE;
-            }
-        }
+        SLock(&LDR_CUSTOM_LOCK);
 
-        if (shouldFix) {
-            SLock(&LDR_CUSTOM_LOCK);
+        DWORD SavedProtect = 0;
 
-            DWORD SavedProtect = 0;
+        VirtualProtectDirect(_G_ENTRY_POINT, ENTRY_DATA_SIZE, PAGE_EXECUTE_READWRITE, &SavedProtect);
+        RtlCopyMemory(ENTRY_DATA_BACKUP, _G_ENTRY_POINT, ENTRY_DATA_SIZE);
+        RtlCopyMemory(_G_ENTRY_POINT, ENTRY_DATA, ENTRY_DATA_SIZE);
+        VirtualProtectDirect(_G_ENTRY_POINT, ENTRY_DATA_SIZE, SavedProtect, &SavedProtect);
 
-            VirtualProtectDirect(_G_ENTRY_POINT, ENTRY_DATA_SIZE, PAGE_EXECUTE_READWRITE, &SavedProtect);
-            RtlCopyMemory(ENTRY_DATA_BACKUP, _G_ENTRY_POINT, ENTRY_DATA_SIZE);
-            RtlCopyMemory(_G_ENTRY_POINT, ENTRY_DATA, ENTRY_DATA_SIZE);
-            VirtualProtectDirect(_G_ENTRY_POINT, ENTRY_DATA_SIZE, SavedProtect, &SavedProtect);
-
-            LdrpCallTlsInitializersOriginal(Arg1, Arg2);
-
-            VirtualProtectDirect(_G_ENTRY_POINT, ENTRY_DATA_SIZE, PAGE_EXECUTE_READWRITE, &SavedProtect);
-            RtlCopyMemory(_G_ENTRY_POINT, ENTRY_DATA_BACKUP, ENTRY_DATA_SIZE);
-            VirtualProtectDirect(_G_ENTRY_POINT, ENTRY_DATA_SIZE, SavedProtect, &SavedProtect);
-
-            SUnlock(&LDR_CUSTOM_LOCK);
-        }
-    } else {
         LdrpCallTlsInitializersOriginal(Arg1, Arg2);
+
+        VirtualProtectDirect(_G_ENTRY_POINT, ENTRY_DATA_SIZE, PAGE_EXECUTE_READWRITE, &SavedProtect);
+        RtlCopyMemory(_G_ENTRY_POINT, ENTRY_DATA_BACKUP, ENTRY_DATA_SIZE);
+        VirtualProtectDirect(_G_ENTRY_POINT, ENTRY_DATA_SIZE, SavedProtect, &SavedProtect);
+
+        SUnlock(&LDR_CUSTOM_LOCK);
     }
 
     if (SBIE_BASE_ADDRESS == 0) {
