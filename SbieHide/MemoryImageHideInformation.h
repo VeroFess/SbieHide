@@ -1,5 +1,6 @@
 #pragma once
-#include "MINT.h"
+#include <phnt_windows.h>
+#include <phnt.h>
 
 struct MemoryImageHideInformation {
 	ULONG_PTR ImageStartAddress;

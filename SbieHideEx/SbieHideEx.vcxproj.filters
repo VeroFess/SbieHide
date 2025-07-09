@@ -1,0 +1,259 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="源文件">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="头文件">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
+    </Filter>
+    <Filter Include="资源文件">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="源文件\hde">
+      <UniqueIdentifier>{83fb1320-c3ac-46e0-a5dc-7eb93f651e05}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="头文件\hde">
+      <UniqueIdentifier>{ae139b63-eeff-4204-99f0-db5294521322}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="源文件\minhook">
+      <UniqueIdentifier>{3e4e9598-e1ca-4056-807f-25cca277f2ad}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="头文件\minhook">
+      <UniqueIdentifier>{e5a305a2-0d49-4f38-8d08-6ef099ea33d8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="头文件\phnt">
+      <UniqueIdentifier>{93970ec6-adf9-496e-ad08-44d8c72f275f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="源文件\zydis">
+      <UniqueIdentifier>{b8ed539f-45f5-4b21-8856-bee76607259e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ASM">
+      <UniqueIdentifier>{690f456d-bf12-423b-a7b5-aa3cd8488cb7}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="entry.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="hde32.c">
+      <Filter>源文件\hde</Filter>
+    </ClCompile>
+    <ClCompile Include="hde64.c">
+      <Filter>源文件\hde</Filter>
+    </ClCompile>
+    <ClCompile Include="buffer.cpp">
+      <Filter>源文件\minhook</Filter>
+    </ClCompile>
+    <ClCompile Include="hook.cpp">
+      <Filter>源文件\minhook</Filter>
+    </ClCompile>
+    <ClCompile Include="trampoline.cpp">
+      <Filter>源文件\minhook</Filter>
+    </ClCompile>
+    <ClCompile Include="export_var.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="rt.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="zydis.c">
+      <Filter>源文件\zydis</Filter>
+    </ClCompile>
+    <ClCompile Include="address_finder.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="detours.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="hde32.h">
+      <Filter>头文件\hde</Filter>
+    </ClInclude>
+    <ClInclude Include="hde64.h">
+      <Filter>头文件\hde</Filter>
+    </ClInclude>
+    <ClInclude Include="pstdint.h">
+      <Filter>头文件\hde</Filter>
+    </ClInclude>
+    <ClInclude Include="table32.h">
+      <Filter>头文件\hde</Filter>
+    </ClInclude>
+    <ClInclude Include="table64.h">
+      <Filter>头文件\hde</Filter>
+    </ClInclude>
+    <ClInclude Include="buffer.h">
+      <Filter>头文件\minhook</Filter>
+    </ClInclude>
+    <ClInclude Include="minhook.h">
+      <Filter>头文件\minhook</Filter>
+    </ClInclude>
+    <ClInclude Include="trampoline.h">
+      <Filter>头文件\minhook</Filter>
+    </ClInclude>
+    <ClInclude Include="simple_runtime_library.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="crc64.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="syscall_invoker.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="phnt\include\ntafd.h">
+      <Filter>头文件\phnt</Filter>
+    </ClInclude>
+    <ClInclude Include="phnt\include\ntbcd.h">
+      <Filter>头文件\phnt</Filter>
+    </ClInclude>
+    <ClInclude Include="phnt\include\ntdbg.h">
+      <Filter>头文件\phnt</Filter>
+    </ClInclude>
+    <ClInclude Include="phnt\include\ntexapi.h">
+      <Filter>头文件\phnt</Filter>
+    </ClInclude>
+    <ClInclude Include="phnt\include\ntgdi.h">
+      <Filter>头文件\phnt</Filter>
+    </ClInclude>
+    <ClInclude Include="phnt\include\ntimage.h">
+      <Filter>头文件\phnt</Filter>
+    </ClInclude>
+    <ClInclude Include="phnt\include\ntintsafe.h">
+      <Filter>头文件\phnt</Filter>
+    </ClInclude>
+    <ClInclude Include="phnt\include\ntioapi.h">
+      <Filter>头文件\phnt</Filter>
+    </ClInclude>
+    <ClInclude Include="phnt\include\ntkeapi.h">
+      <Filter>头文件\phnt</Filter>
+    </ClInclude>
+    <ClInclude Include="phnt\include\ntldr.h">
+      <Filter>头文件\phnt</Filter>
+    </ClInclude>
+    <ClInclude Include="phnt\include\ntlpcapi.h">
+      <Filter>头文件\phnt</Filter>
+    </ClInclude>
+    <ClInclude Include="phnt\include\ntmisc.h">
+      <Filter>头文件\phnt</Filter>
+    </ClInclude>
+    <ClInclude Include="phnt\include\ntmmapi.h">
+      <Filter>头文件\phnt</Filter>
+    </ClInclude>
+    <ClInclude Include="phnt\include\ntnls.h">
+      <Filter>头文件\phnt</Filter>
+    </ClInclude>
+    <ClInclude Include="phnt\include\ntobapi.h">
+      <Filter>头文件\phnt</Filter>
+    </ClInclude>
+    <ClInclude Include="phnt\include\ntpebteb.h">
+      <Filter>头文件\phnt</Filter>
+    </ClInclude>
+    <ClInclude Include="phnt\include\ntpfapi.h">
+      <Filter>头文件\phnt</Filter>
+    </ClInclude>
+    <ClInclude Include="phnt\include\ntpnpapi.h">
+      <Filter>头文件\phnt</Filter>
+    </ClInclude>
+    <ClInclude Include="phnt\include\ntpoapi.h">
+      <Filter>头文件\phnt</Filter>
+    </ClInclude>
+    <ClInclude Include="phnt\include\ntpsapi.h">
+      <Filter>头文件\phnt</Filter>
+    </ClInclude>
+    <ClInclude Include="phnt\include\ntregapi.h">
+      <Filter>头文件\phnt</Filter>
+    </ClInclude>
+    <ClInclude Include="phnt\include\ntrtl.h">
+      <Filter>头文件\phnt</Filter>
+    </ClInclude>
+    <ClInclude Include="phnt\include\ntsam.h">
+      <Filter>头文件\phnt</Filter>
+    </ClInclude>
+    <ClInclude Include="phnt\include\ntseapi.h">
+      <Filter>头文件\phnt</Filter>
+    </ClInclude>
+    <ClInclude Include="phnt\include\ntsmss.h">
+      <Filter>头文件\phnt</Filter>
+    </ClInclude>
+    <ClInclude Include="phnt\include\ntstrsafe.h">
+      <Filter>头文件\phnt</Filter>
+    </ClInclude>
+    <ClInclude Include="phnt\include\ntsxs.h">
+      <Filter>头文件\phnt</Filter>
+    </ClInclude>
+    <ClInclude Include="phnt\include\nttmapi.h">
+      <Filter>头文件\phnt</Filter>
+    </ClInclude>
+    <ClInclude Include="phnt\include\nttp.h">
+      <Filter>头文件\phnt</Filter>
+    </ClInclude>
+    <ClInclude Include="phnt\include\ntuser.h">
+      <Filter>头文件\phnt</Filter>
+    </ClInclude>
+    <ClInclude Include="phnt\include\ntwmi.h">
+      <Filter>头文件\phnt</Filter>
+    </ClInclude>
+    <ClInclude Include="phnt\include\ntwow64.h">
+      <Filter>头文件\phnt</Filter>
+    </ClInclude>
+    <ClInclude Include="phnt\include\ntxcapi.h">
+      <Filter>头文件\phnt</Filter>
+    </ClInclude>
+    <ClInclude Include="phnt\include\ntzwapi.h">
+      <Filter>头文件\phnt</Filter>
+    </ClInclude>
+    <ClInclude Include="phnt\include\phnt.h">
+      <Filter>头文件\phnt</Filter>
+    </ClInclude>
+    <ClInclude Include="phnt\include\phnt_ntdef.h">
+      <Filter>头文件\phnt</Filter>
+    </ClInclude>
+    <ClInclude Include="phnt\include\phnt_windows.h">
+      <Filter>头文件\phnt</Filter>
+    </ClInclude>
+    <ClInclude Include="phnt\include\smbios.h">
+      <Filter>头文件\phnt</Filter>
+    </ClInclude>
+    <ClInclude Include="phnt\include\subprocesstag.h">
+      <Filter>头文件\phnt</Filter>
+    </ClInclude>
+    <ClInclude Include="phnt\include\usermgr.h">
+      <Filter>头文件\phnt</Filter>
+    </ClInclude>
+    <ClInclude Include="phnt\include\winsta.h">
+      <Filter>头文件\phnt</Filter>
+    </ClInclude>
+    <ClInclude Include="zydis.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="address_finder.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="detours.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <MASM Include="syscall.asm">
+      <Filter>ASM</Filter>
+    </MASM>
+    <MASM Include="memset.asm">
+      <Filter>ASM</Filter>
+    </MASM>
+    <MASM Include="memcpy.asm">
+      <Filter>ASM</Filter>
+    </MASM>
+    <MASM Include="memcmp.asm">
+      <Filter>ASM</Filter>
+    </MASM>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="module.def">
+      <Filter>源文件</Filter>
+    </None>
+  </ItemGroup>
+</Project>

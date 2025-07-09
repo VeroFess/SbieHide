@@ -29,9 +29,6 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="MINT.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
     <ClInclude Include="MinHook.h">
       <Filter>头文件</Filter>
     </ClInclude>

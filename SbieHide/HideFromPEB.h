@@ -1,4 +1,5 @@
 #pragma once
-#include "MINT.h"
+#include <phnt_windows.h>
+#include <phnt.h>
 
 VOID EraseModuleNameFromPeb();

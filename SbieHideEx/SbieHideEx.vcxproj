@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>17.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{03ab5809-c03e-4386-b8a7-ed5e0549bdbc}</ProjectGuid>
+    <RootNamespace>SbieHideEx</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+    <Import Project="$(VCTargetsPath)\BuildCustomizations\masm.props" />
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ExternalIncludePath>$(ProjectDir)/phnt/include;$(VC_IncludePath);$(WindowsSDK_IncludePath);</ExternalIncludePath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ExternalIncludePath>$(ProjectDir)/phnt/include;$(VC_IncludePath);$(WindowsSDK_IncludePath);</ExternalIncludePath>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>false</SDLCheck>
+      <PreprocessorDefinitions>ZYDIS_DISABLE_FORMATTER;ZYDIS_STATIC_BUILD;ZYCORE_STATIC_BUILD;WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+    </ClCompile>
+    <Link>
+      <SubSystem>Native</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <IgnoreAllDefaultLibraries>true</IgnoreAllDefaultLibraries>
+      <NoEntryPoint>true</NoEntryPoint>
+      <ModuleDefinitionFile>module.def</ModuleDefinitionFile>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>false</SDLCheck>
+      <PreprocessorDefinitions>ZYDIS_DISABLE_FORMATTER;ZYDIS_STATIC_BUILD;ZYCORE_STATIC_BUILD;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+    </ClCompile>
+    <Link>
+      <SubSystem>Native</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <IgnoreAllDefaultLibraries>true</IgnoreAllDefaultLibraries>
+      <NoEntryPoint>true</NoEntryPoint>
+      <ModuleDefinitionFile>module.def</ModuleDefinitionFile>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="address_finder.cpp" />
+    <ClCompile Include="buffer.cpp" />
+    <ClCompile Include="detours.cpp" />
+    <ClCompile Include="hde32.c" />
+    <ClCompile Include="hde64.c" />
+    <ClCompile Include="hook.cpp" />
+    <ClCompile Include="entry.cpp" />
+    <ClCompile Include="rt.cpp" />
+    <ClCompile Include="export_var.cpp" />
+    <ClCompile Include="trampoline.cpp" />
+    <ClCompile Include="zydis.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <MASM Include="memcmp.asm" />
+    <MASM Include="memcpy.asm" />
+    <MASM Include="memset.asm" />
+    <MASM Include="syscall.asm">
+      <FileType>Document</FileType>
+    </MASM>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="address_finder.h" />
+    <ClInclude Include="buffer.h" />
+    <ClInclude Include="crc64.h" />
+    <ClInclude Include="detours.h" />
+    <ClInclude Include="hde32.h" />
+    <ClInclude Include="hde64.h" />
+    <ClInclude Include="minhook.h" />
+    <ClInclude Include="phnt\include\ntafd.h" />
+    <ClInclude Include="phnt\include\ntbcd.h" />
+    <ClInclude Include="phnt\include\ntdbg.h" />
+    <ClInclude Include="phnt\include\ntexapi.h" />
+    <ClInclude Include="phnt\include\ntgdi.h" />
+    <ClInclude Include="phnt\include\ntimage.h" />
+    <ClInclude Include="phnt\include\ntintsafe.h" />
+    <ClInclude Include="phnt\include\ntioapi.h" />
+    <ClInclude Include="phnt\include\ntkeapi.h" />
+    <ClInclude Include="phnt\include\ntldr.h" />
+    <ClInclude Include="phnt\include\ntlpcapi.h" />
+    <ClInclude Include="phnt\include\ntmisc.h" />
+    <ClInclude Include="phnt\include\ntmmapi.h" />
+    <ClInclude Include="phnt\include\ntnls.h" />
+    <ClInclude Include="phnt\include\ntobapi.h" />
+    <ClInclude Include="phnt\include\ntpebteb.h" />
+    <ClInclude Include="phnt\include\ntpfapi.h" />
+    <ClInclude Include="phnt\include\ntpnpapi.h" />
+    <ClInclude Include="phnt\include\ntpoapi.h" />
+    <ClInclude Include="phnt\include\ntpsapi.h" />
+    <ClInclude Include="phnt\include\ntregapi.h" />
+    <ClInclude Include="phnt\include\ntrtl.h" />
+    <ClInclude Include="phnt\include\ntsam.h" />
+    <ClInclude Include="phnt\include\ntseapi.h" />
+    <ClInclude Include="phnt\include\ntsmss.h" />
+    <ClInclude Include="phnt\include\ntstrsafe.h" />
+    <ClInclude Include="phnt\include\ntsxs.h" />
+    <ClInclude Include="phnt\include\nttmapi.h" />
+    <ClInclude Include="phnt\include\nttp.h" />
+    <ClInclude Include="phnt\include\ntuser.h" />
+    <ClInclude Include="phnt\include\ntwmi.h" />
+    <ClInclude Include="phnt\include\ntwow64.h" />
+    <ClInclude Include="phnt\include\ntxcapi.h" />
+    <ClInclude Include="phnt\include\ntzwapi.h" />
+    <ClInclude Include="phnt\include\phnt.h" />
+    <ClInclude Include="phnt\include\phnt_ntdef.h" />
+    <ClInclude Include="phnt\include\phnt_windows.h" />
+    <ClInclude Include="phnt\include\smbios.h" />
+    <ClInclude Include="phnt\include\subprocesstag.h" />
+    <ClInclude Include="phnt\include\usermgr.h" />
+    <ClInclude Include="phnt\include\winsta.h" />
+    <ClInclude Include="pstdint.h" />
+    <ClInclude Include="simple_runtime_library.h" />
+    <ClInclude Include="syscall_invoker.h" />
+    <ClInclude Include="table32.h" />
+    <ClInclude Include="table64.h" />
+    <ClInclude Include="trampoline.h" />
+    <ClInclude Include="zydis.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="module.def" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+    <Import Project="$(VCTargetsPath)\BuildCustomizations\masm.targets" />
+  </ImportGroup>
+</Project>

@@ -1,4 +1,5 @@
-#include "HideFromPEB.h"
+#include <phnt_windows.h>
+#include <phnt.h>
 #include "MemoryImageHideInformation.h"
 
 VOID EraseModuleNameFromPeb() {
