@@ -17,6 +17,8 @@ int main(int argc, char* argv[]) {
     HANDLE              ParentProcess = NULL;
     STARTUPINFOEXA      StartupInfoEx = {};
     SIZE_T              AttributeListSize = 0;
+    BOOL                IsProcessStarted = FALSE;
+    int                 ExitCode = 1;
 
     // Check if we have at least one argument (target executable)
     if (argc < 2) {
@@ -73,16 +75,21 @@ int main(int argc, char* argv[]) {
         goto CleanAndExit;
     }
 
-    free(CoreLibraryLocalAddress);
-
     if (!NT_SUCCESS(NtResumeProcess(ProcessInformation.hProcess))) {
         printf("Unable to resume child process execution, the process is about to exit...\n");
         goto CleanAndExit;
     }
 
+    IsProcessStarted = TRUE;
+    ExitCode = 0;
     printf("Successfully started the child process!\n");
 
 CleanAndExit:
+    if (CoreLibraryLocalAddress != nullptr) {
+        free(CoreLibraryLocalAddress);
+        CoreLibraryLocalAddress = nullptr;
+    }
+
     if (StartupInfoEx.lpAttributeList) {
         DeleteProcThreadAttributeList(StartupInfoEx.lpAttributeList);
         HeapFree(GetProcessHeap(), 0, StartupInfoEx.lpAttributeList);
@@ -98,11 +105,15 @@ CleanAndExit:
     }
 
     if (ProcessInformation.hProcess != NULL) {
-        TerminateProcess(ProcessInformation.hProcess, 0);
+        if (IsProcessCreateDone && !IsProcessStarted) {
+            TerminateProcess(ProcessInformation.hProcess, 0);
+        }
         CloseHandle(ProcessInformation.hProcess);
     }
 
     if (ProcessInformation.hThread != NULL) {
         CloseHandle(ProcessInformation.hThread);
     }
+
+    return ExitCode;
 }
