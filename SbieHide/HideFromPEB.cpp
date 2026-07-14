@@ -2,52 +2,43 @@
 #include <phnt.h>
 #include "MemoryImageHideInformation.h"
 
-VOID EraseModuleNameFromPeb() {
-    PPEB                  ProcessEnvironmentBlock = nullptr;
-    PLIST_ENTRY           FirstEntry              = nullptr;
-    PLIST_ENTRY           CurrentEntry            = nullptr;
-    PLIST_ENTRY           NextEntry               = nullptr;
-    PLDR_DATA_TABLE_ENTRY CurrentEntryData        = nullptr;
-
-    RtlAcquirePebLock();
-
-    ProcessEnvironmentBlock = NtCurrentPeb();
-
-    FirstEntry = CurrentEntry = ProcessEnvironmentBlock->Ldr->InLoadOrderModuleList.Flink;
-
-    while (CurrentEntry->Flink != FirstEntry) {
-        CurrentEntryData = CONTAINING_RECORD(reinterpret_cast<PLDR_DATA_TABLE_ENTRY>(CurrentEntry), LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
-
-        if (IsAddressShouldHide(CurrentEntryData->DllBase)) {
-            if (FirstEntry == CurrentEntry) {
-                FirstEntry = CurrentEntry->Flink;
-            }
-
-            NextEntry                                = CurrentEntry->Flink;
-            CurrentEntryData->HashLinks.Blink->Flink = CurrentEntryData->HashLinks.Flink;
-            CurrentEntryData->HashLinks.Flink->Blink = CurrentEntryData->HashLinks.Blink;
-
-            CurrentEntryData->InLoadOrderLinks.Blink->Flink = CurrentEntryData->InLoadOrderLinks.Flink;
-            CurrentEntryData->InLoadOrderLinks.Flink->Blink = CurrentEntryData->InLoadOrderLinks.Blink;
-
-            CurrentEntryData->InMemoryOrderLinks.Blink->Flink = CurrentEntryData->InMemoryOrderLinks.Flink;
-            CurrentEntryData->InMemoryOrderLinks.Flink->Blink = CurrentEntryData->InMemoryOrderLinks.Blink;
-
-            CurrentEntryData->InInitializationOrderLinks.Blink->Flink = CurrentEntryData->InInitializationOrderLinks.Flink;
-            CurrentEntryData->InInitializationOrderLinks.Flink->Blink = CurrentEntryData->InInitializationOrderLinks.Blink;
-
-            CurrentEntryData->NodeModuleLink.Blink->Flink = CurrentEntryData->NodeModuleLink.Flink;
-            CurrentEntryData->NodeModuleLink.Flink->Blink = CurrentEntryData->NodeModuleLink.Blink;
-
-            RtlZeroMemory(CurrentEntryData->BaseDllName.Buffer, CurrentEntryData->BaseDllName.MaximumLength);
-            RtlZeroMemory(CurrentEntryData->FullDllName.Buffer, CurrentEntryData->FullDllName.MaximumLength);
-
-            CurrentEntry = NextEntry;
-            continue;
-        }
-
-        CurrentEntry = CurrentEntry->Flink;
+BOOLEAN EraseModuleNameFromPeb() {
+    const PPEB peb = NtCurrentPeb();
+    if (peb == nullptr || peb->Ldr == nullptr) {
+        return FALSE;
     }
 
-    RtlReleasePebLock();
+    // Called only from DLL_PROCESS_ATTACH initialization, where the native
+    // loader lock is already held. Do not introduce a second PEB/loader lock.
+    bool        removedAny = false;
+    PLIST_ENTRY head       = &peb->Ldr->InLoadOrderModuleList;
+    PLIST_ENTRY current    = head->Flink;
+    while (current != nullptr && current != head) {
+        PLIST_ENTRY next  = current->Flink;
+        const auto  entry = CONTAINING_RECORD(
+            current, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
+        if (IsAddressShouldHide(entry->DllBase)) {
+            const auto unlink = [](PLIST_ENTRY link) {
+                if (link->Blink != nullptr && link->Flink != nullptr) {
+                    link->Blink->Flink = link->Flink;
+                    link->Flink->Blink = link->Blink;
+                }
+            };
+            unlink(&entry->HashLinks);
+            unlink(&entry->InLoadOrderLinks);
+            unlink(&entry->InMemoryOrderLinks);
+            unlink(&entry->InInitializationOrderLinks);
+            unlink(&entry->NodeModuleLink);
+            if (entry->BaseDllName.Buffer != nullptr) {
+                RtlZeroMemory(entry->BaseDllName.Buffer, entry->BaseDllName.MaximumLength);
+            }
+            if (entry->FullDllName.Buffer != nullptr) {
+                RtlZeroMemory(entry->FullDllName.Buffer, entry->FullDllName.MaximumLength);
+            }
+            removedAny = true;
+        }
+        current = next;
+    }
+
+    return removedAny ? TRUE : FALSE;
 }

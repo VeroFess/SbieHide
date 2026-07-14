@@ -1,17 +1,17 @@
 #pragma once
+
 #include <phnt_windows.h>
 #include <phnt.h>
 
 struct MemoryImageHideInformation {
-	ULONG_PTR ImageStartAddress;
-	ULONG_PTR ImageEndAddress;
+        ULONG_PTR ImageStartAddress = 0;
+        ULONG_PTR ImageEndAddress   = 0;
 
-	MemoryImageHideInformation(ULONG_PTR Start, ULONG_PTR End) {
-		ImageStartAddress = Start;
-		ImageEndAddress = End;
-	}
+        constexpr MemoryImageHideInformation() = default;
+        constexpr MemoryImageHideInformation(ULONG_PTR start, ULONG_PTR end)
+            : ImageStartAddress(start), ImageEndAddress(end) {}
 };
 
 BOOLEAN InitMemoryImageHideInformation();
-BOOLEAN IsAddressShouldHide(ULONG_PTR Address);
-BOOLEAN IsAddressShouldHide(PVOID Address);
+BOOLEAN IsAddressShouldHide(ULONG_PTR address);
+BOOLEAN IsAddressShouldHide(const void *address);

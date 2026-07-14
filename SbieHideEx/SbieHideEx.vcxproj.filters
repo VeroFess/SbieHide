@@ -39,9 +39,6 @@
     <ClCompile Include="entry.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="hde32.c">
-      <Filter>源文件\hde</Filter>
-    </ClCompile>
     <ClCompile Include="hde64.c">
       <Filter>源文件\hde</Filter>
     </ClCompile>
@@ -66,21 +63,18 @@
     <ClCompile Include="address_finder.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="detours.cpp">
+    <ClCompile Include="query_detours.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="loader_detours.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="hde32.h">
-      <Filter>头文件\hde</Filter>
-    </ClInclude>
     <ClInclude Include="hde64.h">
       <Filter>头文件\hde</Filter>
     </ClInclude>
     <ClInclude Include="pstdint.h">
-      <Filter>头文件\hde</Filter>
-    </ClInclude>
-    <ClInclude Include="table32.h">
       <Filter>头文件\hde</Filter>
     </ClInclude>
     <ClInclude Include="table64.h">
@@ -91,6 +85,9 @@
     </ClInclude>
     <ClInclude Include="minhook.h">
       <Filter>头文件\minhook</Filter>
+    </ClInclude>
+    <ClInclude Include="query_detours.h">
+      <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="trampoline.h">
       <Filter>头文件\minhook</Filter>
@@ -236,8 +233,14 @@
     <ClInclude Include="detours.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="hidden_name.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
+    <MASM Include="bootstrap.asm">
+      <Filter>ASM</Filter>
+    </MASM>
     <MASM Include="syscall.asm">
       <Filter>ASM</Filter>
     </MASM>

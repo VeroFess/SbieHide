@@ -1,27 +1,34 @@
 LIBRARY SbieHideEx
 
 EXPORTS
-NTDLL_BASE_ADDRESS
-NTDLL_SIZE
-SBIEHIDE_BASE_ADDRESS
-SBIEHIDE_SIZE
-ENTRY_DATA
-ENTRY_DATA_SIZE
-
-NtFreeVirtualMemorySystemCallIndex
-NtQueryVirtualMemorySystemCallIndex
-NtQuerySystemInformationSystemCallIndex
-NtAllocateVirtualMemorySystemCallIndex
-NtDelayExecutionSystemCallIndex
-NtProtectVirtualMemorySystemCallIndex
-NtQueryInformationProcessSystemCallIndex
-NtQuerySectionSystemCallIndex
-NtQueryInformationFileSystemCallIndex
-NtQueryObjectSystemCallIndex
-
-NtQueryVirtualMemoryDetours
-NtQueryObjectDetours
-NtQueryInformationFileDetours
-NtQuerySectionDetours
-NtQuerySystemInformationDetours
-NtQueryInformationProcessDetours
+ENTRY_DATA @1
+ENTRY_DATA_SIZE @2
+NTDLL_BASE_ADDRESS @3
+NTDLL_SIZE @4
+NtAllocateVirtualMemorySystemCallIndex @5
+NtDelayExecutionSystemCallIndex @6
+NtFreeVirtualMemorySystemCallIndex @7
+NtProtectVirtualMemorySystemCallIndex @8
+NtQueryInformationFileSystemCallIndex @9
+NtQueryInformationProcessSystemCallIndex @10
+NtQueryObjectSystemCallIndex @11
+NtQuerySectionSystemCallIndex @12
+NtQuerySystemInformationSystemCallIndex @13
+NtQueryVirtualMemorySystemCallIndex @14
+SBIEHIDE_BASE_ADDRESS @15
+SBIEHIDE_SIZE @16
+NtQueryInformationFileDetours @17
+NtQueryInformationProcessDetours @18
+NtQueryObjectDetours @19
+NtQuerySectionDetours @20
+NtQuerySystemInformationDetours @21
+NtQueryVirtualMemoryDetours @22
+MODULE_INITIALIZATION_STATE @23
+MODULE_INITIALIZATION_FAILURE_STAGE @24
+ModulePreProcessInitRoutine @25
+LDR_GET_DLL_HANDLE_HIT_COUNT @26
+LDR_GET_DLL_HANDLE_HIDE_COUNT @27
+MODULE_INITIALIZATION_SIGNAL @28
+LDR_LOAD_DLL_BOOTSTRAP_TARGET @29
+LDR_LOAD_DLL_BOOTSTRAP_ORIGINAL @30
+LdrLoadDllBootstrapDetours @31

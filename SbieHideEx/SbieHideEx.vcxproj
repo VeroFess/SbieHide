@@ -1,10 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
-    <ProjectConfiguration Include="Release|Win32">
-      <Configuration>Release</Configuration>
-      <Platform>Win32</Platform>
-    </ProjectConfiguration>
     <ProjectConfiguration Include="Release|x64">
       <Configuration>Release</Configuration>
       <Platform>x64</Platform>
@@ -18,17 +14,10 @@
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
-    <ConfigurationType>DynamicLibrary</ConfigurationType>
-    <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v143</PlatformToolset>
-    <WholeProgramOptimization>true</WholeProgramOptimization>
-    <CharacterSet>Unicode</CharacterSet>
-  </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>v145</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
@@ -38,38 +27,13 @@
   </ImportGroup>
   <ImportGroup Label="Shared">
   </ImportGroup>
-  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
-    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
-  </ImportGroup>
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
-    <ExternalIncludePath>$(ProjectDir)/phnt/include;$(VC_IncludePath);$(WindowsSDK_IncludePath);</ExternalIncludePath>
-  </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ExternalIncludePath>$(ProjectDir)/phnt/include;$(VC_IncludePath);$(WindowsSDK_IncludePath);</ExternalIncludePath>
   </PropertyGroup>
-  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
-    <ClCompile>
-      <WarningLevel>Level3</WarningLevel>
-      <FunctionLevelLinking>true</FunctionLevelLinking>
-      <IntrinsicFunctions>true</IntrinsicFunctions>
-      <SDLCheck>false</SDLCheck>
-      <PreprocessorDefinitions>ZYDIS_DISABLE_FORMATTER;ZYDIS_STATIC_BUILD;ZYCORE_STATIC_BUILD;WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <ConformanceMode>true</ConformanceMode>
-      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
-      <BufferSecurityCheck>false</BufferSecurityCheck>
-    </ClCompile>
-    <Link>
-      <SubSystem>Native</SubSystem>
-      <GenerateDebugInformation>true</GenerateDebugInformation>
-      <IgnoreAllDefaultLibraries>true</IgnoreAllDefaultLibraries>
-      <NoEntryPoint>true</NoEntryPoint>
-      <ModuleDefinitionFile>module.def</ModuleDefinitionFile>
-    </Link>
-  </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
@@ -87,37 +51,40 @@
       <IgnoreAllDefaultLibraries>true</IgnoreAllDefaultLibraries>
       <NoEntryPoint>true</NoEntryPoint>
       <ModuleDefinitionFile>module.def</ModuleDefinitionFile>
+      <TargetMachine>MachineX64</TargetMachine>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="address_finder.cpp" />
     <ClCompile Include="buffer.cpp" />
-    <ClCompile Include="detours.cpp" />
-    <ClCompile Include="hde32.c" />
+    <ClCompile Include="query_detours.cpp" />
+    <ClCompile Include="loader_detours.cpp" />
     <ClCompile Include="hde64.c" />
     <ClCompile Include="hook.cpp" />
     <ClCompile Include="entry.cpp" />
     <ClCompile Include="rt.cpp" />
     <ClCompile Include="export_var.cpp" />
     <ClCompile Include="trampoline.cpp" />
-    <ClCompile Include="zydis.c" />
+    <ClCompile Include="zydis.c">
+      <DisableSpecificWarnings>6297;6385;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <MASM Include="bootstrap.asm" />
     <MASM Include="memcmp.asm" />
     <MASM Include="memcpy.asm" />
     <MASM Include="memset.asm" />
-    <MASM Include="syscall.asm">
-      <FileType>Document</FileType>
-    </MASM>
+    <MASM Include="syscall.asm" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="address_finder.h" />
     <ClInclude Include="buffer.h" />
     <ClInclude Include="crc64.h" />
     <ClInclude Include="detours.h" />
-    <ClInclude Include="hde32.h" />
+    <ClInclude Include="hidden_name.h" />
     <ClInclude Include="hde64.h" />
     <ClInclude Include="minhook.h" />
+    <ClInclude Include="query_detours.h" />
     <ClInclude Include="phnt\include\ntafd.h" />
     <ClInclude Include="phnt\include\ntbcd.h" />
     <ClInclude Include="phnt\include\ntdbg.h" />
@@ -162,7 +129,6 @@
     <ClInclude Include="pstdint.h" />
     <ClInclude Include="simple_runtime_library.h" />
     <ClInclude Include="syscall_invoker.h" />
-    <ClInclude Include="table32.h" />
     <ClInclude Include="table64.h" />
     <ClInclude Include="trampoline.h" />
     <ClInclude Include="zydis.h" />

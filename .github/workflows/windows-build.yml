@@ -1,0 +1,80 @@
+name: Windows build
+
+on:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      run_sandboxie:
+        description: Run runtime gates on a self-hosted runner labeled sandboxie
+        required: false
+        default: false
+        type: boolean
+  push:
+    branches: [master]
+  schedule:
+    - cron: '17 3 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  format:
+    name: First-party format check
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: microsoft/setup-msbuild@v2
+        with:
+          vs-version: '[18.0,19.0)'
+      - name: Check clang-format whitelist
+        shell: pwsh
+        run: ./scripts/check-format.ps1
+
+  build:
+    name: Release ${{ matrix.platform }}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [x86, x64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: microsoft/setup-msbuild@v2
+        with:
+          vs-version: '[18.0,19.0)'
+
+      - name: Build clean solution
+        shell: pwsh
+        run: ./scripts/build.ps1 -Configuration Release -Platform ${{ matrix.platform }}
+
+      - name: Verify PE architecture and exports
+        shell: pwsh
+        run: ./scripts/test.ps1 -Configuration Release -Platform ${{ matrix.platform }} -SkipBuild -SkipSandbox
+
+      - name: Upload build outputs and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SbieHide-Release-${{ matrix.platform }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            artifacts/bin/${{ matrix.platform }}/Release/**
+            artifacts/logs/SbieHide-Release-${{ matrix.platform }}.binlog
+
+  sandboxie-runtime:
+    name: Sandboxie ${{ matrix.platform }} runtime
+    if: ${{ github.event_name == 'push' || github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.run_sandboxie) }}
+    runs-on: [self-hosted, Windows, X64, sandboxie]
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [x86, x64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: microsoft/setup-msbuild@v2
+        with:
+          vs-version: '[18.0,19.0)'
+      - name: Build and run Sandboxie smoke tests
+        shell: pwsh
+        run: ./scripts/test.ps1 -Configuration Release -Platform ${{ matrix.platform }}

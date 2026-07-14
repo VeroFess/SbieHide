@@ -1,383 +1,613 @@
 #include "SbieHideLoader.h"
-#include <stdio.h>
+#include "PeImageView.h"
+#include "NtdllRemapper.h"
 
 #include <psapi.h>
-#include <cstdint>
 #include <algorithm>
+#include <array>
+#include <cstdlib>
+#include <cstring>
+#include <cwchar>
+#include <limits>
+#include <string>
+#include <vector>
+
 #pragma comment(lib, "psapi.lib")
 #pragma comment(lib, "ntdll.lib")
 
-BOOL FixLocalImageReloc(PVOID RemoteBase, LPVOID LocalBuffer) {
-    PIMAGE_DOS_HEADER     DosHeader           = nullptr;
-    PIMAGE_NT_HEADERS     NtHeader            = nullptr;
-    PIMAGE_SECTION_HEADER SectionBegin        = nullptr;
-    PIMAGE_SECTION_HEADER SectionEntity       = nullptr;
-    PVOID                 BaseAddressToModify = nullptr;
-    SIZE_T                SizeToModify        = 0;
-    ULONG                 OldProtect          = 0;
-    NTSTATUS              Status              = STATUS_SUCCESS;
+namespace {
 
-    DosHeader = reinterpret_cast<PIMAGE_DOS_HEADER>(LocalBuffer);
-    if (DosHeader->e_magic != 0x5A4D) {
-        return FALSE;
+    class LoadedImage {
+        public:
+            LoadedImage() noexcept
+                : module_(nullptr) {}
+            ~LoadedImage() {
+                if (module_)
+                    FreeLibrary(module_);
+            }
+            bool Load(PCWSTR path) {
+                module_ = LoadLibraryExW(path, nullptr, LOAD_LIBRARY_AS_IMAGE_RESOURCE);
+                return module_ != nullptr;
+            }
+            HMODULE get() const noexcept {
+                return module_;
+            }
+
+        private:
+            HMODULE module_;
+    };
+
+    class MappedSystemImage {
+        public:
+            MappedSystemImage() noexcept
+                : view_(nullptr), size_(0) {}
+            ~MappedSystemImage() {
+                if (view_) {
+                    NtUnmapViewOfSection(NtCurrentProcess(), view_);
+                }
+            }
+
+            bool Load(PCWSTR fileName) {
+                if (fileName == nullptr || *fileName == L'\0') {
+                    SetLastError(ERROR_INVALID_PARAMETER);
+                    return false;
+                }
+                const std::wstring objectPath = std::wstring(L"\\KnownDlls\\") + fileName;
+                UNICODE_STRING     path       = {};
+                RtlInitUnicodeString(&path, objectPath.c_str());
+                OBJECT_ATTRIBUTES attributes = {};
+                InitializeObjectAttributes(
+                    &attributes, &path, OBJ_CASE_INSENSITIVE, nullptr, nullptr);
+
+                HANDLE   section = nullptr;
+                NTSTATUS status  = NtOpenSection(
+                    &section, SECTION_MAP_READ | SECTION_QUERY, &attributes);
+                if (!NT_SUCCESS(status)) {
+                    SetLastError(RtlNtStatusToDosError(status));
+                    return false;
+                }
+
+                SIZE_T viewSize = 0;
+                status          = NtMapViewOfSection(
+                    section,
+                    NtCurrentProcess(),
+                    &view_,
+                    0,
+                    0,
+                    nullptr,
+                    &viewSize,
+                    ViewShare,
+                    0,
+                    PAGE_READONLY);
+                NtClose(section);
+                if (!NT_SUCCESS(status)) {
+                    view_ = nullptr;
+                    SetLastError(RtlNtStatusToDosError(status));
+                    return false;
+                }
+
+                const auto dos = static_cast<const IMAGE_DOS_HEADER *>(view_);
+                if (dos->e_magic != IMAGE_DOS_SIGNATURE || dos->e_lfanew <= 0 ||
+                    static_cast<ULONG>(dos->e_lfanew) > 0x100000) {
+                    Reset(ERROR_BAD_EXE_FORMAT);
+                    return false;
+                }
+                const auto nt = reinterpret_cast<const IMAGE_NT_HEADERS64 *>(
+                    static_cast<const BYTE *>(view_) + dos->e_lfanew);
+                if (nt->Signature != IMAGE_NT_SIGNATURE ||
+                    nt->FileHeader.Machine != IMAGE_FILE_MACHINE_AMD64 ||
+                    nt->OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR64_MAGIC ||
+                    nt->OptionalHeader.SizeOfImage == 0) {
+                    Reset(ERROR_BAD_EXE_FORMAT);
+                    return false;
+                }
+                size_ = nt->OptionalHeader.SizeOfImage;
+                return true;
+            }
+
+            PVOID base() const noexcept {
+                return view_;
+            }
+            SIZE_T size() const noexcept {
+                return size_;
+            }
+
+        private:
+            void Reset(DWORD error) noexcept {
+                if (view_) {
+                    NtUnmapViewOfSection(NtCurrentProcess(), view_);
+                    view_ = nullptr;
+                }
+                size_ = 0;
+                SetLastError(error);
+            }
+
+            PVOID  view_;
+            SIZE_T size_;
+    };
+
+    bool QueryImage(HANDLE process, PVOID address, MEMORY_IMAGE_INFORMATION *information) {
+        SIZE_T         returned = 0;
+        const NTSTATUS status   = NtQueryVirtualMemory(process, address, MemoryImageInformation, information, sizeof(*information), &returned);
+        if (!NT_SUCCESS(status)) {
+            SetLastError(RtlNtStatusToDosError(status));
+            return false;
+        }
+        return information->ImageBase && information->SizeOfImage;
     }
 
-    NtHeader = reinterpret_cast<PIMAGE_NT_HEADERS>(reinterpret_cast<PUCHAR>(LocalBuffer) + DosHeader->e_lfanew);
-    if (NtHeader->Signature != 0x00004550) {
-        return FALSE;
+    bool CopyLoadedImage(const loader::PeImageView &source, void *destination, size_t destinationSize) {
+        if (!destination || destinationSize < source.size() ||
+            source.nt()->OptionalHeader.SizeOfHeaders > destinationSize)
+            return false;
+        std::memcpy(destination, source.base(), source.nt()->OptionalHeader.SizeOfHeaders);
+        for (WORD index = 0; index < source.section_count(); ++index) {
+            const auto  &section = source.sections()[index];
+            const size_t bytes   = std::max<size_t>(section.Misc.VirtualSize, section.SizeOfRawData);
+            if (!bytes)
+                continue;
+            if (section.VirtualAddress > destinationSize || bytes > destinationSize - section.VirtualAddress)
+                return false;
+            std::memcpy(static_cast<BYTE *>(destination) + section.VirtualAddress, source.base() + section.VirtualAddress, bytes);
+        }
+        return true;
     }
 
-    if (NtHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size == 0) {
-        return TRUE;
+    bool ReadRemoteExact(HANDLE process, const void *remote, void *local, SIZE_T bytes) {
+        SIZE_T         read   = 0;
+        const NTSTATUS status = NtReadVirtualMemory(
+            process, const_cast<void *>(remote), local, bytes, &read);
+        if (!NT_SUCCESS(status) || read != bytes) {
+            SetLastError(NT_SUCCESS(status) ? ERROR_PARTIAL_COPY : RtlNtStatusToDosError(status));
+            return false;
+        }
+        return true;
     }
 
-    PIMAGE_BASE_RELOCATION RelocData     = reinterpret_cast<PIMAGE_BASE_RELOCATION>(reinterpret_cast<PUCHAR>(LocalBuffer) + NtHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress);
-    PBYTE                  LocationDelta = reinterpret_cast<PBYTE>((reinterpret_cast<ULONG64>(RemoteBase) - NtHeader->OptionalHeader.ImageBase));
+    bool WriteRemoteExact(HANDLE process, PVOID remote, const void *local, SIZE_T bytes) {
+        SIZE_T         written = 0;
+        const NTSTATUS status  = NtWriteVirtualMemory(process, remote, const_cast<PVOID>(local), bytes, &written);
+        if (!NT_SUCCESS(status) || written != bytes) {
+            SetLastError(NT_SUCCESS(status) ? ERROR_PARTIAL_COPY : RtlNtStatusToDosError(status));
+            return false;
+        }
+        return true;
+    }
 
-    while (RelocData->VirtualAddress) {
-        UINT  AmountOfEntries = (RelocData->SizeOfBlock - sizeof(IMAGE_BASE_RELOCATION)) / sizeof(WORD);
-        PWORD RelativeInfo    = reinterpret_cast<PWORD>(RelocData + 1);
+    bool DecodeSyscallIndex(const void *function, int *index) {
+#ifdef _WIN64
+        if (!function || !index)
+            return false;
+        const auto code = static_cast<const BYTE *>(function);
+        if (code[0] != 0x4c || code[1] != 0x8b || code[2] != 0xd1 || code[3] != 0xb8) {
+            return false;
+        }
+        std::memcpy(index, code + 4, sizeof(*index));
+        return *index > 0;
+#else
+        UNREFERENCED_PARAMETER(function);
+        UNREFERENCED_PARAMETER(index);
+        return false;
+#endif
+    }
 
-        for (UINT i = 0; i != AmountOfEntries; ++i, ++RelativeInfo) {
-            if ((((*RelativeInfo) >> 0x0C) == IMAGE_REL_BASED_DIR64)) {
-                UINT_PTR *Patch = reinterpret_cast<UINT_PTR *>(reinterpret_cast<PUCHAR>(LocalBuffer) + RelocData->VirtualAddress + ((*RelativeInfo) & 0xFFF));
-                *Patch += reinterpret_cast<UINT_PTR>(LocationDelta);
+    bool WriteExport(loader::PeImageView *image, const char *name, const void *value, size_t bytes) {
+        const DWORD rva = image->ExportRva(name, bytes);
+        if (!rva) {
+            SetLastError(ERROR_PROC_NOT_FOUND);
+            return false;
+        }
+        std::memcpy(image->base() + rva, value, bytes);
+        return true;
+    }
+
+    bool CaptureRemoteEntrypointBytes(HANDLE process, BYTE *entry, SIZE_T capacity, SIZE_T *entrySize) {
+        if (!process || !entry || !capacity || !entrySize) {
+            SetLastError(ERROR_INVALID_PARAMETER);
+            return false;
+        }
+        *entrySize = 0;
+
+        PROCESS_BASIC_INFORMATION basicInformation = {};
+        NTSTATUS                  status           = NtQueryInformationProcess(
+            process,
+            ProcessBasicInformation,
+            &basicInformation,
+            sizeof(basicInformation),
+            nullptr);
+        if (!NT_SUCCESS(status) || basicInformation.PebBaseAddress == nullptr) {
+            SetLastError(NT_SUCCESS(status) ? ERROR_BAD_EXE_FORMAT : RtlNtStatusToDosError(status));
+            return false;
+        }
+
+        PVOID       remoteBase       = nullptr;
+        const void *imageBaseAddress = reinterpret_cast<const BYTE *>(
+                                           basicInformation.PebBaseAddress) +
+                                       FIELD_OFFSET(PEB, ImageBaseAddress);
+        if (!ReadRemoteExact(process, imageBaseAddress, &remoteBase, sizeof(remoteBase)) ||
+            remoteBase == nullptr) {
+            return false;
+        }
+
+        IMAGE_DOS_HEADER dosHeader = {};
+        if (!ReadRemoteExact(process, remoteBase, &dosHeader, sizeof(dosHeader)) ||
+            dosHeader.e_magic != IMAGE_DOS_SIGNATURE || dosHeader.e_lfanew <= 0 ||
+            static_cast<ULONG>(dosHeader.e_lfanew) > 0x100000) {
+            SetLastError(ERROR_BAD_EXE_FORMAT);
+            return false;
+        }
+
+        IMAGE_NT_HEADERS64 ntHeaders       = {};
+        const void        *remoteNtHeaders = static_cast<const BYTE *>(remoteBase) + dosHeader.e_lfanew;
+        if (!ReadRemoteExact(process, remoteNtHeaders, &ntHeaders, sizeof(ntHeaders)) ||
+            ntHeaders.Signature != IMAGE_NT_SIGNATURE ||
+            ntHeaders.FileHeader.Machine != IMAGE_FILE_MACHINE_AMD64 ||
+            ntHeaders.FileHeader.SizeOfOptionalHeader != sizeof(IMAGE_OPTIONAL_HEADER64) ||
+            ntHeaders.OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR64_MAGIC ||
+            ntHeaders.OptionalHeader.SizeOfImage == 0 ||
+            ntHeaders.FileHeader.NumberOfSections == 0 ||
+            ntHeaders.FileHeader.NumberOfSections > 96) {
+            SetLastError(ERROR_BAD_EXE_FORMAT);
+            return false;
+        }
+
+        const SIZE_T sectionBytes = static_cast<SIZE_T>(
+                                        ntHeaders.FileHeader.NumberOfSections) *
+                                    sizeof(IMAGE_SECTION_HEADER);
+        std::vector<IMAGE_SECTION_HEADER> sections(ntHeaders.FileHeader.NumberOfSections);
+        const void                       *remoteSections = static_cast<const BYTE *>(remoteNtHeaders) +
+                                     offsetof(IMAGE_NT_HEADERS64, OptionalHeader) +
+                                     ntHeaders.FileHeader.SizeOfOptionalHeader;
+        if (!ReadRemoteExact(process, remoteSections, sections.data(), sectionBytes)) {
+            return false;
+        }
+
+        const DWORD entryRva  = ntHeaders.OptionalHeader.AddressOfEntryPoint;
+        SIZE_T      available = 0;
+        for (const IMAGE_SECTION_HEADER &section : sections) {
+            const SIZE_T sectionSize = std::max<SIZE_T>(
+                section.Misc.VirtualSize, section.SizeOfRawData);
+            if (entryRva >= section.VirtualAddress &&
+                static_cast<ULONGLONG>(entryRva) <
+                    static_cast<ULONGLONG>(section.VirtualAddress) + sectionSize) {
+                available = sectionSize - (entryRva - section.VirtualAddress);
+                break;
+            }
+        }
+        if (entryRva == 0 || entryRva >= ntHeaders.OptionalHeader.SizeOfImage ||
+            available == 0) {
+            SetLastError(ERROR_BAD_EXE_FORMAT);
+            return false;
+        }
+
+        *entrySize = std::min<SIZE_T>(
+            capacity,
+            std::min<SIZE_T>(available, ntHeaders.OptionalHeader.SizeOfImage - entryRva));
+        if (*entrySize == 0 || !ReadRemoteExact(
+                                   process,
+                                   static_cast<const BYTE *>(remoteBase) + entryRva,
+                                   entry,
+                                   *entrySize)) {
+            *entrySize = 0;
+            return false;
+        }
+        return true;
+    }
+
+    ULONG SectionProtection(DWORD characteristics) {
+        const bool executable = (characteristics & IMAGE_SCN_MEM_EXECUTE) != 0;
+        const bool readable   = (characteristics & IMAGE_SCN_MEM_READ) != 0;
+        const bool writable   = (characteristics & IMAGE_SCN_MEM_WRITE) != 0;
+        if (executable) {
+            if (writable)
+                return PAGE_EXECUTE_READWRITE;
+            if (readable)
+                return PAGE_EXECUTE_READ;
+            return PAGE_EXECUTE;
+        }
+        if (writable)
+            return PAGE_READWRITE;
+        if (readable)
+            return PAGE_READONLY;
+        return PAGE_NOACCESS;
+    }
+
+    bool ProtectRemoteImage(HANDLE process, PVOID remoteBase, const loader::PeImageView &image) {
+        SYSTEM_INFO systemInformation = {};
+        GetSystemInfo(&systemInformation);
+        const SIZE_T pageSize = systemInformation.dwPageSize;
+        if (pageSize == 0 || image.size() > std::numeric_limits<SIZE_T>::max() - (pageSize - 1)) {
+            SetLastError(ERROR_BAD_EXE_FORMAT);
+            return false;
+        }
+
+        const SIZE_T       pageCount = (image.size() + pageSize - 1) / pageSize;
+        std::vector<DWORD> pageCharacteristics(pageCount, 0);
+        std::vector<bool>  pageUsed(pageCount, false);
+        auto               markPages = [&](SIZE_T offset, SIZE_T extent, DWORD characteristics) {
+            if (offset > image.size() || extent > image.size() - offset || extent == 0)
+                return false;
+            const SIZE_T firstPage = offset / pageSize;
+            const SIZE_T lastPage  = (offset + extent - 1) / pageSize;
+            for (SIZE_T page = firstPage; page <= lastPage; ++page) {
+                pageUsed[page] = true;
+                pageCharacteristics[page] |= characteristics;
+            }
+            return true;
+        };
+
+        if (!markPages(
+                0,
+                image.nt()->OptionalHeader.SizeOfHeaders,
+                IMAGE_SCN_MEM_READ)) {
+            SetLastError(ERROR_BAD_EXE_FORMAT);
+            return false;
+        }
+        for (WORD index = 0; index < image.section_count(); ++index) {
+            const auto  &section = image.sections()[index];
+            const SIZE_T extent  = std::max<SIZE_T>(
+                section.Misc.VirtualSize, section.SizeOfRawData);
+            if (extent != 0 && !markPages(
+                                   section.VirtualAddress,
+                                   extent,
+                                   section.Characteristics)) {
+                SetLastError(ERROR_BAD_EXE_FORMAT);
+                return false;
             }
         }
 
-        RelocData = reinterpret_cast<IMAGE_BASE_RELOCATION *>(reinterpret_cast<BYTE *>(RelocData) + RelocData->SizeOfBlock);
+        PVOID    address    = remoteBase;
+        SIZE_T   bytes      = image.size();
+        ULONG    oldProtect = 0;
+        NTSTATUS status     = NtProtectVirtualMemory(
+            process, &address, &bytes, PAGE_NOACCESS, &oldProtect);
+        if (!NT_SUCCESS(status)) {
+            SetLastError(RtlNtStatusToDosError(status));
+            return false;
+        }
+
+        SIZE_T page = 0;
+        while (page < pageCount) {
+            if (!pageUsed[page]) {
+                ++page;
+                continue;
+            }
+            const ULONG  protection = SectionProtection(pageCharacteristics[page]);
+            const SIZE_T firstPage  = page;
+            while (++page < pageCount && pageUsed[page] &&
+                   SectionProtection(pageCharacteristics[page]) == protection) {
+            }
+            address = static_cast<BYTE *>(remoteBase) + firstPage * pageSize;
+            bytes   = (page - firstPage) * pageSize;
+            status  = NtProtectVirtualMemory(
+                process, &address, &bytes, protection, &oldProtect);
+            if (!NT_SUCCESS(status)) {
+                SetLastError(RtlNtStatusToDosError(status));
+                return false;
+            }
+        }
+        status = NtFlushInstructionCache(process, remoteBase, image.size());
+        if (!NT_SUCCESS(status)) {
+            SetLastError(RtlNtStatusToDosError(status));
+            return false;
+        }
+        return true;
     }
 
-    return TRUE;
+    void FreeRemote(HANDLE process, PVOID *base) {
+        if (!base || !*base)
+            return;
+
+        PVOID          address = *base;
+        SIZE_T         size    = 0;
+        const NTSTATUS status  = NtFreeVirtualMemory(process, &address, &size, MEM_RELEASE);
+        if (NT_SUCCESS(status)) {
+            *base = nullptr;
+        } else {
+            SetLastError(RtlNtStatusToDosError(status));
+        }
+    }
+
+} // namespace
+
+ULONG GetExportOffsetChecked(_In_ PVOID imageBase, _In_ SIZE_T imageSize, _In_ PCCH exportName, _In_ SIZE_T minimumSize) {
+    loader::PeImageView image;
+    return image.Open(imageBase, imageSize) ? image.ExportRva(exportName, minimumSize) : 0;
 }
 
-NTSTATUS CopyMemoryBlockToAddress(HANDLE ProtectedProcessHandle, PVOID LocalAddress, PVOID RemoteAddress, SIZE_T Size) {
-    SIZE_T   RealWrite = 0;
-    NTSTATUS Status    = STATUS_SUCCESS;
-
-    if (!NT_SUCCESS(Status = NtWriteVirtualMemory(ProtectedProcessHandle, RemoteAddress, LocalAddress, Size, &RealWrite))) {
-        goto CleanAndExit;
-    }
-
-    if (RealWrite != Size) {
-        Status = STATUS_INCOMPATIBLE_FILE_MAP;
-    }
-
-CleanAndExit:
-    return Status;
+ULONG GetExportOffset(_In_ PVOID imageBase, _In_ PCCH exportName) {
+    if (!imageBase || !exportName)
+        return 0;
+    auto dos = static_cast<PIMAGE_DOS_HEADER>(imageBase);
+    if (dos->e_magic != IMAGE_DOS_SIGNATURE || dos->e_lfanew <= 0)
+        return 0;
+    auto nt = reinterpret_cast<PIMAGE_NT_HEADERS64>(static_cast<BYTE *>(imageBase) + dos->e_lfanew);
+    if (nt->Signature != IMAGE_NT_SIGNATURE)
+        return 0;
+    return GetExportOffsetChecked(imageBase, nt->OptionalHeader.SizeOfImage, exportName, 1);
 }
 
-BOOL MapCoreLibraryToTargetProcessInternal(HANDLE ProtectedProcessHandle, PVOID RemoteBase, LPVOID LocalBuffer) {
-    PIMAGE_DOS_HEADER     DosHeader     = nullptr;
-    PIMAGE_NT_HEADERS     NtHeader      = nullptr;
-    PIMAGE_SECTION_HEADER SectionBegin  = nullptr;
-    PIMAGE_SECTION_HEADER SectionEntity = nullptr;
-    PVOID                 LocalAddress  = nullptr;
-    PVOID                 RemoteAddress = nullptr;
-    SIZE_T                Size          = 0;
-    NTSTATUS              Status        = STATUS_SUCCESS;
+BOOL MapCoreLibraryToProtectedProcessW(PCWSTR path, HANDLE process, PULONG_PTR mappedImageBase, PPVOID localBuffer) {
+    if (!path || !process || !mappedImageBase || !localBuffer) {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+    *mappedImageBase = 0;
+    *localBuffer     = nullptr;
+#ifndef _WIN64
+    SetLastError(ERROR_NOT_SUPPORTED);
+    return FALSE;
+#else
+    LoadedImage module;
+    if (!module.Load(path))
+        return FALSE;
 
-    DosHeader    = reinterpret_cast<PIMAGE_DOS_HEADER>(LocalBuffer);
-    NtHeader     = reinterpret_cast<PIMAGE_NT_HEADERS>(reinterpret_cast<PUCHAR>(LocalBuffer) + DosHeader->e_lfanew);
-    SectionBegin = reinterpret_cast<PIMAGE_SECTION_HEADER>(reinterpret_cast<PUCHAR>(LocalBuffer) + DosHeader->e_lfanew + sizeof(IMAGE_NT_HEADERS));
+    MEMORY_IMAGE_INFORMATION sourceInfo = {};
+    if (!QueryImage(NtCurrentProcess(), module.get(), &sourceInfo))
+        return FALSE;
+    loader::PeImageView source;
+    if (!source.Open(sourceInfo.ImageBase, sourceInfo.SizeOfImage)) {
+        SetLastError(ERROR_BAD_EXE_FORMAT);
+        return FALSE;
+    }
 
-    for (int SectionIndex = 0; SectionIndex < NtHeader->FileHeader.NumberOfSections; SectionIndex++) {
-        SectionEntity = &SectionBegin[SectionIndex];
-        LocalAddress  = reinterpret_cast<PVOID>(reinterpret_cast<ULONG_PTR>(LocalBuffer) + SectionEntity->VirtualAddress);
-        RemoteAddress = reinterpret_cast<PVOID>(reinterpret_cast<ULONG_PTR>(RemoteBase) + SectionEntity->VirtualAddress);
-        Size          = std::max(SectionEntity->Misc.VirtualSize, SectionEntity->SizeOfRawData);
+    void *staging = std::calloc(1, source.size());
+    if (!staging) {
+        SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+        return FALSE;
+    }
+    loader::PeImageView image;
+    if (!CopyLoadedImage(source, staging, source.size()) || !image.Open(staging, source.size())) {
+        std::free(staging);
+        SetLastError(ERROR_BAD_EXE_FORMAT);
+        return FALSE;
+    }
 
-        Status = CopyMemoryBlockToAddress(ProtectedProcessHandle, LocalAddress, RemoteAddress, Size);
+    PVOID  remoteNtdllBase = nullptr;
+    SIZE_T remoteNtdllSize = 0;
+    if (!QueryRemoteNtdllImage(process, &remoteNtdllBase, &remoteNtdllSize)) {
+        std::free(staging);
+        return FALSE;
+    }
 
-        if (!NT_SUCCESS(Status)) {
+    std::array<BYTE, 256> entry     = {};
+    SIZE_T                entrySize = 0;
+    if (!CaptureRemoteEntrypointBytes(process, entry.data(), entry.size(), &entrySize)) {
+        std::free(staging);
+        return FALSE;
+    }
+
+    const char  *dataExports[] = { "ENTRY_DATA", "ENTRY_DATA_SIZE", "NTDLL_BASE_ADDRESS", "NTDLL_SIZE",
+                                   "SBIEHIDE_BASE_ADDRESS", "SBIEHIDE_SIZE" };
+    const size_t dataSizes[]   = { entry.size(), sizeof(entrySize), sizeof(PVOID), sizeof(SIZE_T), sizeof(PVOID), sizeof(SIZE_T) };
+    for (size_t index = 0; index < _countof(dataExports); ++index) {
+        if (!image.ExportRva(dataExports[index], dataSizes[index])) {
+            std::free(staging);
+            SetLastError(ERROR_PROC_NOT_FOUND);
             return FALSE;
         }
     }
 
-    return NT_SUCCESS(Status);
-}
+    struct SyscallSlot {
+            const char *configurationName;
+            const char *apiName;
+    };
+    const SyscallSlot syscalls[] = {
+        { "NtFreeVirtualMemorySystemCallIndex", "NtFreeVirtualMemory" },
+        { "NtQueryVirtualMemorySystemCallIndex", "NtQueryVirtualMemory" },
+        { "NtQuerySystemInformationSystemCallIndex", "NtQuerySystemInformation" },
+        { "NtAllocateVirtualMemorySystemCallIndex", "NtAllocateVirtualMemory" },
+        { "NtDelayExecutionSystemCallIndex", "NtDelayExecution" },
+        { "NtProtectVirtualMemorySystemCallIndex", "NtProtectVirtualMemory" },
+        { "NtQueryInformationProcessSystemCallIndex", "NtQueryInformationProcess" },
+        { "NtQuerySectionSystemCallIndex", "NtQuerySection" },
+        { "NtQueryInformationFileSystemCallIndex", "NtQueryInformationFile" },
+        { "NtQueryObjectSystemCallIndex", "NtQueryObject" },
+    };
 
-static BOOL GetRemoteProcessMainModuleInformation(_In_ HANDLE RemoteProcessHandle, _Out_ HMODULE *RemoteImageBase, _Out_ MODULEINFO *RemoteModuleInfo, _Out_writes_(MAX_PATH) CHAR RemoteImagePath[MAX_PATH]) {
-    DWORD ReturnLength = 0;
-
-    if (!EnumProcessModulesEx(RemoteProcessHandle, RemoteImageBase, sizeof(*RemoteImageBase), &ReturnLength,
-#ifdef _WIN64
-                              LIST_MODULES_64BIT | LIST_MODULES_32BIT
-#else
-                              LIST_MODULES_32BIT
-#endif
-                              )) {
+    MappedSystemImage   cleanNtdll;
+    loader::PeImageView cleanNtdllView;
+    if (!cleanNtdll.Load(L"ntdll.dll") ||
+        !cleanNtdllView.Open(cleanNtdll.base(), cleanNtdll.size())) {
+        std::free(staging);
+        if (GetLastError() == ERROR_SUCCESS)
+            SetLastError(ERROR_BAD_EXE_FORMAT);
         return FALSE;
     }
 
-    if (!GetModuleInformation(RemoteProcessHandle, *RemoteImageBase, RemoteModuleInfo, sizeof(*RemoteModuleInfo))) {
+    std::array<int, _countof(syscalls)> indices = {};
+    for (size_t index = 0; index < _countof(syscalls); ++index) {
+        const DWORD apiRva = cleanNtdllView.ExportRva(syscalls[index].apiName, 8);
+        if (!image.ExportRva(syscalls[index].configurationName, sizeof(int)) ||
+            !apiRva || !DecodeSyscallIndex(cleanNtdllView.base() + apiRva, &indices[index])) {
+            std::free(staging);
+            SetLastError(ERROR_INVALID_FUNCTION);
+            return FALSE;
+        }
+    }
+
+    PVOID    remoteBase = reinterpret_cast<PVOID>(image.nt()->OptionalHeader.ImageBase);
+    SIZE_T   remoteSize = image.size();
+    NTSTATUS status     = NtAllocateVirtualMemory(
+        process,
+        &remoteBase,
+        0,
+        &remoteSize,
+        MEM_RESERVE | MEM_COMMIT,
+        PAGE_READWRITE);
+    if (!NT_SUCCESS(status)) {
+        remoteBase = nullptr;
+        remoteSize = image.size();
+        status     = NtAllocateVirtualMemory(
+            process,
+            &remoteBase,
+            0,
+            &remoteSize,
+            MEM_RESERVE | MEM_COMMIT,
+            PAGE_READWRITE);
+    }
+    if (!NT_SUCCESS(status) || !remoteBase || remoteSize < image.size()) {
+        if (remoteBase)
+            FreeRemote(process, &remoteBase);
+        std::free(staging);
+        SetLastError(NT_SUCCESS(status) ? ERROR_NOT_ENOUGH_MEMORY : RtlNtStatusToDosError(status));
         return FALSE;
     }
 
-    if (!GetModuleFileNameExA(RemoteProcessHandle, *RemoteImageBase, RemoteImagePath, MAX_PATH)) {
+    bool configured = WriteExport(&image, "ENTRY_DATA", entry.data(), entry.size()) &&
+                      WriteExport(&image, "ENTRY_DATA_SIZE", &entrySize, sizeof(entrySize)) &&
+                      WriteExport(&image, "NTDLL_BASE_ADDRESS", &remoteNtdllBase, sizeof(PVOID)) &&
+                      WriteExport(&image, "NTDLL_SIZE", &remoteNtdllSize, sizeof(SIZE_T)) &&
+                      WriteExport(&image, "SBIEHIDE_BASE_ADDRESS", &remoteBase, sizeof(PVOID)) &&
+                      WriteExport(&image, "SBIEHIDE_SIZE", &sourceInfo.SizeOfImage, sizeof(SIZE_T));
+    for (size_t index = 0; configured && index < _countof(syscalls); ++index) {
+        configured = WriteExport(
+            &image,
+            syscalls[index].configurationName,
+            &indices[index],
+            sizeof(indices[index]));
+    }
+    if (!configured || !image.ApplyRelocations(
+                           static_cast<ULONG_PTR>(image.nt()->OptionalHeader.ImageBase),
+                           reinterpret_cast<ULONG_PTR>(remoteBase))) {
+        FreeRemote(process, &remoteBase);
+        std::free(staging);
+        if (GetLastError() == ERROR_SUCCESS)
+            SetLastError(ERROR_BAD_EXE_FORMAT);
         return FALSE;
     }
 
+    bool written = WriteRemoteExact(process, remoteBase, staging, image.nt()->OptionalHeader.SizeOfHeaders);
+    for (WORD index = 0; written && index < image.section_count(); ++index) {
+        const auto  &section = image.sections()[index];
+        const SIZE_T bytes   = std::max<SIZE_T>(section.Misc.VirtualSize, section.SizeOfRawData);
+        if (!bytes)
+            continue;
+        written = WriteRemoteExact(process, static_cast<BYTE *>(remoteBase) + section.VirtualAddress, static_cast<BYTE *>(staging) + section.VirtualAddress, bytes);
+    }
+    if (!written || !ProtectRemoteImage(process, remoteBase, image)) {
+        FreeRemote(process, &remoteBase);
+        std::free(staging);
+        return FALSE;
+    }
+
+    *mappedImageBase = reinterpret_cast<ULONG_PTR>(remoteBase);
+    *localBuffer     = staging;
+    SetLastError(ERROR_SUCCESS);
     return TRUE;
+#endif
 }
 
-BOOL CaptureRemoteEntrypointBytes(HANDLE ProtectedProcessHandle, PUCHAR EntryBuffer, PSIZE_T EntrySize) {
-    NTSTATUS              Status                    = STATUS_SUCCESS;
-    HMODULE               RemoteImageBase           = nullptr;
-    MODULEINFO            RemoteModuleInfo          = {};
-    CHAR                  RemoteImagePath[MAX_PATH] = {};
-    HMODULE               LocalImageHandle          = nullptr;
-    PVOID                 LocalWriteableImageBuffer = nullptr;
-    PIMAGE_DOS_HEADER     LocalImageDosHeader       = nullptr;
-    PIMAGE_NT_HEADERS     LocalImageNtHeader        = nullptr;
-    PIMAGE_SECTION_HEADER LocalImageSectionBegin    = nullptr;
-    PIMAGE_SECTION_HEADER LocalImageSectionEntity   = nullptr;
-    SIZE_T                LocalImageSize            = 0;
-    DWORD                 EntryPointRva             = 0;
-    SIZE_T                RemainingBytesInSection   = 0;
-    SIZE_T                BytesToCopy               = 0;
-    SIZE_T                SectionIndex              = 0;
-    DWORD                 ReturnLength              = 0;
-
-    if (!GetRemoteProcessMainModuleInformation(ProtectedProcessHandle, &RemoteImageBase, &RemoteModuleInfo, RemoteImagePath)) {
-        Status = STATUS_INVALID_PARAMETER;
-        goto CleanAndExit;
+BOOL MapCoreLibraryToProtectedProcess(PCCH path, HANDLE process, PULONG_PTR mappedImageBase, PPVOID localBuffer) {
+    if (!path) {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
     }
-
-    if ((LocalImageHandle = LoadLibraryExA(RemoteImagePath, NULL, LOAD_LIBRARY_AS_IMAGE_RESOURCE)) == NULL) {
-        Status = STATUS_DLL_NOT_FOUND;
-        goto CleanAndExit;
-    }
-
-    LocalImageDosHeader = reinterpret_cast<PIMAGE_DOS_HEADER>(LocalImageHandle);
-    LocalImageNtHeader  = reinterpret_cast<PIMAGE_NT_HEADERS>(
-        reinterpret_cast<PUCHAR>(LocalImageHandle) + LocalImageDosHeader->e_lfanew);
-
-    LocalImageSize = LocalImageNtHeader->OptionalHeader.SizeOfImage;
-
-    if ((LocalWriteableImageBuffer = malloc(LocalImageSize)) == nullptr) {
-        Status = STATUS_INSUFFICIENT_RESOURCES;
-        goto CleanAndExit;
-    }
-
-    memcpy(LocalWriteableImageBuffer, reinterpret_cast<PVOID>(LocalImageHandle), LocalImageSize);
-
-    if (!FixLocalImageReloc(RemoteImageBase, LocalWriteableImageBuffer)) {
-        Status = STATUS_INVALID_IMAGE_WIN_64;
-        goto CleanAndExit;
-    }
-
-    EntryPointRva          = LocalImageNtHeader->OptionalHeader.AddressOfEntryPoint;
-    LocalImageSectionBegin = IMAGE_FIRST_SECTION(LocalImageNtHeader);
-
-    for (SectionIndex = 0;
-         SectionIndex < LocalImageNtHeader->FileHeader.NumberOfSections;
-         SectionIndex++) {
-
-        LocalImageSectionEntity = &LocalImageSectionBegin[SectionIndex];
-
-        if (EntryPointRva >= LocalImageSectionEntity->VirtualAddress &&
-            EntryPointRva < LocalImageSectionEntity->VirtualAddress + LocalImageSectionEntity->Misc.VirtualSize) {
-
-            RemainingBytesInSection =
-                LocalImageSectionEntity->VirtualAddress +
-                LocalImageSectionEntity->Misc.VirtualSize -
-                EntryPointRva;
-
-            break;
-        }
-    }
-
-    BytesToCopy = RemainingBytesInSection < 256 ? RemainingBytesInSection : 256;
-
-    memcpy(EntryBuffer, reinterpret_cast<PUCHAR>(LocalWriteableImageBuffer) + EntryPointRva, BytesToCopy);
-
-    *EntrySize = static_cast<ULONG>(BytesToCopy);
-
-CleanAndExit:
-    if (LocalWriteableImageBuffer != nullptr) {
-        free(LocalWriteableImageBuffer);
-    }
-
-    if (LocalImageHandle != NULL) {
-        FreeLibrary(LocalImageHandle);
-    }
-
-    return NT_SUCCESS(Status);
-}
-
-static uint32_t GetSyscallIndex(PVOID Function) {
-    uint32_t index = 0;
-    if (reinterpret_cast<PUCHAR>(Function)[0] == 0x4C && reinterpret_cast<PUCHAR>(Function)[1] == 0x8B && reinterpret_cast<PUCHAR>(Function)[2] == 0xD1 && reinterpret_cast<PUCHAR>(Function)[3] == 0xB8) {
-        memcpy(&index, &reinterpret_cast<PUCHAR>(Function)[4], 4);
-    }
-    return index;
-}
-
-ULONG GetExportOffset(_In_ PVOID ImageBase, _In_ PCCH ExportName) {
-    PIMAGE_DOS_HEADER       ImageDosHeader        = nullptr;
-    PIMAGE_NT_HEADERS       ImageNtHeader         = nullptr;
-    PIMAGE_EXPORT_DIRECTORY ImageExportDirectory  = nullptr;
-    ULONG                   ExportRva             = 0;
-    ULONG                   Index                 = 0;
-    ULONG                   ExportDirectorySize   = 0;
-    PULONG                  AddressOfNames        = nullptr;
-    PULONG                  AddressOfFunctions    = nullptr;
-    PUSHORT                 AddressOfNameOrdinals = nullptr;
-
-    ImageDosHeader = reinterpret_cast<PIMAGE_DOS_HEADER>(ImageBase);
-    if (ImageDosHeader->e_magic != IMAGE_DOS_SIGNATURE) {
-        return 0;
-    }
-
-    ImageNtHeader = reinterpret_cast<PIMAGE_NT_HEADERS>(
-        reinterpret_cast<PUCHAR>(ImageBase) + ImageDosHeader->e_lfanew);
-
-    if (ImageNtHeader->Signature != IMAGE_NT_SIGNATURE) {
-        return 0;
-    }
-
-    ExportRva           = ImageNtHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress;
-    ExportDirectorySize = ImageNtHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].Size;
-
-    if (ExportRva == 0 || ExportDirectorySize == 0) {
-        return 0;
-    }
-
-    ImageExportDirectory  = reinterpret_cast<PIMAGE_EXPORT_DIRECTORY>(reinterpret_cast<PUCHAR>(ImageBase) + ExportRva);
-    AddressOfNames        = reinterpret_cast<PULONG>(reinterpret_cast<PUCHAR>(ImageBase) + ImageExportDirectory->AddressOfNames);
-    AddressOfFunctions    = reinterpret_cast<PULONG>(reinterpret_cast<PUCHAR>(ImageBase) + ImageExportDirectory->AddressOfFunctions);
-    AddressOfNameOrdinals = reinterpret_cast<PUSHORT>(reinterpret_cast<PUCHAR>(ImageBase) + ImageExportDirectory->AddressOfNameOrdinals);
-
-    for (Index = 0; Index < ImageExportDirectory->NumberOfNames; Index++) {
-        PCCH CurrentName = reinterpret_cast<PCCH>(
-            reinterpret_cast<PUCHAR>(ImageBase) + AddressOfNames[Index]);
-
-        if (_stricmp(CurrentName, ExportName) == 0) {
-            USHORT Ordinal = AddressOfNameOrdinals[Index];
-            ULONG  FuncRva = AddressOfFunctions[Ordinal];
-            return FuncRva;
-        }
-    }
-
-    return 0;
-}
-
-BOOL MapCoreLibraryToProtectedProcess(PCCH CoreLibraryPath, HANDLE ProtectedProcessHandle, PULONG_PTR MappedImageBase, PPVOID LocalBuffer) {
-    HMODULE                  CoreLibraryHandle                     = 0;
-    MEMORY_IMAGE_INFORMATION LocalCoreLibraryImageInformation      = {};
-    MEMORY_IMAGE_INFORMATION NtDllImageInformation                 = {};
-    PVOID                    LocalWriteableCoreLibraryImageBuffer  = nullptr;
-    SIZE_T                   LocalWriteableCoreLibraryCopyOffset   = 0;
-    MEMORY_BASIC_INFORMATION LocalCoreLibraryMemoryBaseInformatiom = {};
-    PVOID                    InjectedCoreLibraryBaseAddress        = 0;
-    SIZE_T                   InjectedCoreLibraryAllocatedSize      = 0;
-    PIMAGE_DOS_HEADER        LocalCoreLibraryDosHeader             = nullptr;
-    PIMAGE_NT_HEADERS        LocalCoreLibraryNtHeader              = nullptr;
-    PIMAGE_SECTION_HEADER    LocalCoreLibrarySectionBegin          = nullptr;
-    PIMAGE_SECTION_HEADER    LocalCoreLibrarySectionEntity         = nullptr;
-    INT                      NumberOfUsedVerifySlot                = 0;
-    SIZE_T                   ReturnLength                          = 0;
-    PUCHAR                   EntryBuffer                           = nullptr;
-    SIZE_T                   EntrySize                             = 0;
-    NTSTATUS                 Status                                = STATUS_SUCCESS;
-
-    if ((CoreLibraryHandle = LoadLibraryExA(CoreLibraryPath, NULL, LOAD_LIBRARY_AS_IMAGE_RESOURCE)) == nullptr) {
-        goto CleanAndExit;
-    }
-
-    if (!NT_SUCCESS(Status = NtQueryVirtualMemory(NtCurrentProcess(), CoreLibraryHandle, MemoryImageInformation, &LocalCoreLibraryImageInformation, sizeof(MEMORY_IMAGE_INFORMATION), &ReturnLength))) {
-        goto CleanAndExit;
-    }
-
-    if (!NT_SUCCESS(Status = NtQueryVirtualMemory(NtCurrentProcess(), NtQueryVirtualMemory, MemoryImageInformation, &NtDllImageInformation, sizeof(MEMORY_IMAGE_INFORMATION), &ReturnLength))) {
-        goto CleanAndExit;
-    }
-
-    if ((LocalWriteableCoreLibraryImageBuffer = malloc(LocalCoreLibraryImageInformation.SizeOfImage)) == nullptr) {
-        Status = STATUS_INSUFFICIENT_RESOURCES;
-        goto CleanAndExit;
-    }
-
-    do {
-        if (!NT_SUCCESS(Status = NtQueryVirtualMemory(NtCurrentProcess(), reinterpret_cast<PUCHAR>(LocalCoreLibraryImageInformation.ImageBase) + LocalWriteableCoreLibraryCopyOffset, MemoryBasicInformation, &LocalCoreLibraryMemoryBaseInformatiom, sizeof(MEMORY_BASIC_INFORMATION), &ReturnLength))) {
-            goto CleanAndExit;
-        }
-
-        if (LocalCoreLibraryMemoryBaseInformatiom.State == MEM_COMMIT) {
-            memcpy(reinterpret_cast<PUCHAR>(LocalWriteableCoreLibraryImageBuffer) + LocalWriteableCoreLibraryCopyOffset, reinterpret_cast<PUCHAR>(LocalCoreLibraryImageInformation.ImageBase) + LocalWriteableCoreLibraryCopyOffset, LocalCoreLibraryMemoryBaseInformatiom.RegionSize);
-        }
-
-        LocalWriteableCoreLibraryCopyOffset += LocalCoreLibraryMemoryBaseInformatiom.RegionSize;
-    } while (LocalWriteableCoreLibraryCopyOffset < LocalCoreLibraryImageInformation.SizeOfImage);
-
-    InjectedCoreLibraryAllocatedSize = LocalCoreLibraryImageInformation.SizeOfImage;
-
-    if (!NT_SUCCESS(Status = NtAllocateVirtualMemory(ProtectedProcessHandle, &InjectedCoreLibraryBaseAddress, 0, &InjectedCoreLibraryAllocatedSize, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE))) {
-        goto CleanAndExit;
-    }
-
-    if (InjectedCoreLibraryAllocatedSize < LocalCoreLibraryImageInformation.SizeOfImage) {
-        Status = STATUS_INSUFFICIENT_RESOURCES;
-        goto CleanAndExit;
-    }
-
-    {
-        EntryBuffer = reinterpret_cast<PUCHAR>(malloc(256));
-        if (EntryBuffer == nullptr) {
-            Status = STATUS_INSUFFICIENT_RESOURCES;
-            goto CleanAndExit;
-        }
-
-        CaptureRemoteEntrypointBytes(ProtectedProcessHandle, EntryBuffer, &EntrySize);
-        memcpy(reinterpret_cast<PVOID>(reinterpret_cast<ULONG_PTR>(LocalWriteableCoreLibraryImageBuffer) + GetExportOffset(LocalWriteableCoreLibraryImageBuffer, "ENTRY_DATA")), EntryBuffer, EntrySize);
-        memcpy(reinterpret_cast<PVOID>(reinterpret_cast<ULONG_PTR>(LocalWriteableCoreLibraryImageBuffer) + GetExportOffset(LocalWriteableCoreLibraryImageBuffer, "ENTRY_DATA_SIZE")), &EntrySize, sizeof(SIZE_T));
-        memcpy(reinterpret_cast<PVOID>(reinterpret_cast<ULONG_PTR>(LocalWriteableCoreLibraryImageBuffer) + GetExportOffset(LocalWriteableCoreLibraryImageBuffer, "NTDLL_BASE_ADDRESS")), &NtDllImageInformation.ImageBase, sizeof(PVOID));
-        memcpy(reinterpret_cast<PVOID>(reinterpret_cast<ULONG_PTR>(LocalWriteableCoreLibraryImageBuffer) + GetExportOffset(LocalWriteableCoreLibraryImageBuffer, "NTDLL_SIZE")), &NtDllImageInformation.SizeOfImage, sizeof(SIZE_T));
-        memcpy(reinterpret_cast<PVOID>(reinterpret_cast<ULONG_PTR>(LocalWriteableCoreLibraryImageBuffer) + GetExportOffset(LocalWriteableCoreLibraryImageBuffer, "SBIEHIDE_BASE_ADDRESS")), &InjectedCoreLibraryBaseAddress, sizeof(PVOID));
-        memcpy(reinterpret_cast<PVOID>(reinterpret_cast<ULONG_PTR>(LocalWriteableCoreLibraryImageBuffer) + GetExportOffset(LocalWriteableCoreLibraryImageBuffer, "SBIEHIDE_SIZE")), &LocalCoreLibraryImageInformation.SizeOfImage, sizeof(SIZE_T));
-
-#define SET_SYSCALL_INDEX(S)                                                                                                                                                                                      \
-    {                                                                                                                                                                                                             \
-        int S##Index = 0;                                                                                                                                                                                         \
-        S##Index     = GetSyscallIndex(S);                                                                                                                                                                        \
-        memcpy(reinterpret_cast<PVOID>(reinterpret_cast<ULONG_PTR>(LocalWriteableCoreLibraryImageBuffer) + GetExportOffset(LocalWriteableCoreLibraryImageBuffer, #S "SystemCallIndex")), &S##Index, sizeof(int)); \
-    }
-
-        SET_SYSCALL_INDEX(NtFreeVirtualMemory);
-        SET_SYSCALL_INDEX(NtQueryVirtualMemory);
-        SET_SYSCALL_INDEX(NtQuerySystemInformation);
-        SET_SYSCALL_INDEX(NtAllocateVirtualMemory);
-        SET_SYSCALL_INDEX(NtDelayExecution);
-        SET_SYSCALL_INDEX(NtProtectVirtualMemory);
-        SET_SYSCALL_INDEX(NtQueryInformationProcess);
-        SET_SYSCALL_INDEX(NtQuerySection);
-        SET_SYSCALL_INDEX(NtQueryInformationFile);
-        SET_SYSCALL_INDEX(NtQueryObject);
-
-        free(EntryBuffer);
-    }
-
-    if (!FixLocalImageReloc(InjectedCoreLibraryBaseAddress, LocalWriteableCoreLibraryImageBuffer)) {
-        Status = STATUS_INVALID_IMAGE_WIN_64;
-        goto CleanAndExit;
-    }
-
-    if (!MapCoreLibraryToTargetProcessInternal(ProtectedProcessHandle, InjectedCoreLibraryBaseAddress, LocalWriteableCoreLibraryImageBuffer)) {
-        Status = STATUS_UNEXPECTED_MM_MAP_ERROR;
-        goto CleanAndExit;
-    }
-
-CleanAndExit:
-    if (LocalWriteableCoreLibraryImageBuffer != nullptr) {
-        *LocalBuffer = LocalWriteableCoreLibraryImageBuffer;
-    }
-
-    if (CoreLibraryHandle != NULL) {
-        FreeLibrary(CoreLibraryHandle);
-    }
-
-    *MappedImageBase = reinterpret_cast<ULONG_PTR>(InjectedCoreLibraryBaseAddress);
-
-    return NT_SUCCESS(Status);
+    const int required = MultiByteToWideChar(CP_ACP, MB_ERR_INVALID_CHARS, path, -1, nullptr, 0);
+    if (!required)
+        return FALSE;
+    std::wstring wide(static_cast<size_t>(required), L'\0');
+    if (!MultiByteToWideChar(CP_ACP, MB_ERR_INVALID_CHARS, path, -1, &wide[0], required))
+        return FALSE;
+    return MapCoreLibraryToProtectedProcessW(wide.c_str(), process, mappedImageBase, localBuffer);
 }

@@ -155,7 +155,7 @@ static MH_STATUS EnableHookLL(UINT pos, BOOL enable) {
         if (pHook->patchAbove) {
             PJMP_REL_SHORT pShortJmp = (PJMP_REL_SHORT)pHook->pTarget;
             pShortJmp->opcode        = 0xEB;
-            pShortJmp->operand       = (UINT8)(0 - (sizeof(JMP_REL_SHORT) + sizeof(JMP_REL)));
+            pShortJmp->operand       = static_cast<UINT8>(0x100 - (sizeof(JMP_REL_SHORT) + sizeof(JMP_REL)));
         }
     } else {
         if (pHook->patchAbove)
@@ -164,7 +164,19 @@ static MH_STATUS EnableHookLL(UINT pos, BOOL enable) {
             memcpy(pPatchTarget, pHook->backup, sizeof(JMP_REL));
     }
 
-    VirtualProtectDirect(pPatchTarget, patchSize, oldProtect, &oldProtect);
+    typedef NTSTATUS(NTAPI * NTFLUSHINSTRUCTIONCACHETYPE)(HANDLE, PVOID, SIZE_T);
+    constexpr ULONG64 flushHash             = Crc64(0, "NtFlushInstructionCache");
+    const auto        flushInstructionCache = reinterpret_cast<NTFLUSHINSTRUCTIONCACHETYPE>(
+        GetExportedFunctionAddress(
+            reinterpret_cast<HMODULE>(NTDLL_BASE_ADDRESS), NTDLL_SIZE, flushHash));
+    const NTSTATUS flushStatus = flushInstructionCache != nullptr
+                                     ? flushInstructionCache(
+                                           NtCurrentProcess(), pPatchTarget, patchSize)
+                                     : STATUS_PROCEDURE_NOT_FOUND;
+    const BOOL     protectionRestored =
+        VirtualProtectDirect(pPatchTarget, patchSize, oldProtect, &oldProtect);
+    if (!NT_SUCCESS(flushStatus) || !protectionRestored)
+        return MH_ERROR_MEMORY_PROTECT;
 
     pHook->isEnabled   = enable;
     pHook->queueEnable = enable;

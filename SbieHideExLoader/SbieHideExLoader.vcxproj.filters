@@ -24,12 +24,30 @@
     <ClCompile Include="entry.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="CommandLine.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="PeImageView.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="ProcessLauncher.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="SbieHideLoader.h">
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="NtdllRemapper.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="CommandLine.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="PeImageView.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="ProcessLauncher.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>

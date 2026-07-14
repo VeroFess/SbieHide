@@ -1,0 +1,15 @@
+# Vendored headers and generated/amalgamated sources.
+**/phnt/**
+SbieHide/MinHook.h
+SbieHideEx/zydis.c
+SbieHideEx/zydis.h
+SbieHideEx/hde32.c
+SbieHideEx/hde32.h
+SbieHideEx/hde64.c
+SbieHideEx/hde64.h
+SbieHideEx/minhook.h
+SbieHideEx/memcmp.asm
+SbieHideEx/memcpy.asm
+SbieHideEx/memset.asm
+SbieHideEx/table32.h
+SbieHideEx/table64.h

@@ -15,7 +15,7 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="MINT.h">
+    <ClInclude Include="DetectionChecks.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>
@@ -23,5 +23,13 @@
     <ClCompile Include="ConsoleEntry.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="DetectionChecks.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <MASM Include="SyntheticVmpEntry.asm">
+      <Filter>源文件</Filter>
+    </MASM>
   </ItemGroup>
 </Project>

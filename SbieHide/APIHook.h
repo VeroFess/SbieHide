@@ -5,3 +5,4 @@
 #include "MinHook.h"
 
 BOOLEAN EnableApiHook();
+void    DisableApiHook();
